@@ -13,6 +13,9 @@ const draft = (window.__rfDraft ||= {
   step: 0,
   topic: "",
   tone: "intrigante",
+  template: "auto",
+  auto_edit: true,
+  brand: true,
   seconds: 30,
   platform: "TikTok",
   lang: "es",
@@ -79,7 +82,10 @@ function stepIdea(body, show) {
     if (!draft.topic.trim()) return toast("Escribe primero de qué va tu reel", "info");
     write.classList.add("loading");
     try {
-      draft.script = await runJob(api.post("/api/script", { topic: draft.topic, tone: draft.tone, seconds: draft.seconds, platform: draft.platform, lang: draft.lang, extra: draft.extra }));
+      draft.script = await runJob(api.post("/api/script", { topic: draft.topic, tone: draft.tone, seconds: draft.seconds, platform: draft.platform, lang: draft.lang, extra: draft.extra, template: draft.template }));
+      const tpl = state.meta.templates[draft.template];
+      if (tpl?.caption_style) draft.caption_style = tpl.caption_style;
+      if (tpl?.transition) draft.transition = tpl.transition;
       if (draft.script.warnings?.length) toast(`Se usó una plantilla: ${draft.script.warnings[0]}`, "info", 7000);
       show(1);
     } catch (e) {
@@ -91,6 +97,7 @@ function stepIdea(body, show) {
   body.append(
     h("div", { class: "card col", style: { gap: "18px" } },
       field("¿De qué trata tu reel?", topic),
+      field("Formato viral", chips(Object.entries(state.meta.templates).map(([id, t]) => [id, `${t.emoji} ${t.name}`]), draft.template, (v) => (draft.template = v))),
       field("Tono", chips(TONES, draft.tone, (v) => (draft.tone = v))),
       h("div", { class: "grid g3" },
         field("Duración", segmented([[15, "15 s"], [30, "30 s"], [45, "45 s"], [60, "60 s"]], draft.seconds, (v) => (draft.seconds = v))),
@@ -245,6 +252,8 @@ function stepStyle(body, show) {
       field("Volumen de la música", slider(draft.music_volume, 0, 0.6, 0.01, (v) => (draft.music_volume = v), (v) => `${Math.round(v * 100)}%`)),
       h("div", { class: "toggle-row" }, h("span", {}, "Mostrar el gancho como título al inicio"), toggle(draft.hook_overlay, (v) => (draft.hook_overlay = v))),
       h("div", { class: "toggle-row" }, h("span", {}, "Sincronizar subtítulos con Whisper (más preciso)"), toggle(draft.align_with_whisper, (v) => (draft.align_with_whisper = v))),
+      h("div", { class: "toggle-row" }, h("div", {}, h("span", {}, "Edición viral automática"), h("div", { class: "muted small" }, "Palabras clave en color, emojis, zooms de impacto, efectos de sonido y cortes al ritmo")), toggle(draft.auto_edit, (v) => (draft.auto_edit = v))),
+      h("div", { class: "toggle-row" }, h("div", {}, h("span", {}, "Kit de marca"), h("div", { class: "muted small" }, "Intro, outro y llamada a la acción (Ajustes → Kit de marca)")), toggle(draft.brand, (v) => (draft.brand = v))),
     ),
     h("div", { class: "row", style: { marginTop: "22px" } }, btn("Atrás", { icon: "chevronL", cls: "ghost", onClick: () => show(3) }), h("div", { class: "spacer" }), create),
   );
@@ -275,6 +284,8 @@ async function build(body, show) {
     hook_overlay: draft.hook_overlay,
     align_with_whisper: draft.align_with_whisper,
     whisper_model: state.settings.whisper_model,
+    auto_edit: draft.auto_edit,
+    brand: draft.brand,
     extra: { caption: sc.caption || "", hashtags: sc.hashtags || [] },
   };
   try {

@@ -298,7 +298,7 @@ export function ring(size = 150) {
   const r = size / 2 - 8;
   const c = 2 * Math.PI * r;
   const wrap = h("div", { class: "ring", style: { width: `${size}px`, height: `${size}px` } });
-  wrap.innerHTML = `<svg width="${size}" height="${size}"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset=".55" stop-color="#ff4d9d"/><stop offset="1" stop-color="#ff8a3d"/></linearGradient></defs><circle cx="${size / 2}" cy="${size / 2}" r="${r}" stroke="rgba(255,255,255,.07)" stroke-width="10" fill="none"/><circle class="fg" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke="url(#rg)" stroke-width="10" stroke-linecap="round" fill="none" stroke-dasharray="${c}" stroke-dashoffset="${c}"/></svg><div class="val">0%</div>`;
+  wrap.innerHTML = `<svg width="${size}" height="${size}"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset=".55" stop-color="#ff4d9d"/><stop offset="1" stop-color="#ff8a3d"/></linearGradient></defs><circle cx="${size / 2}" cy="${size / 2}" r="${r}" stroke="rgba(255,255,255,.07)" stroke-width="10" fill="none"/><circle class="fg" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke="url(#rg)" stroke-width="10" stroke-linecap="round" fill="none" stroke-dasharray="${c}" stroke-dashoffset="${c}"/></svg><div class="val" style="font-size:${Math.round(size * 0.2)}px">0%</div>`;
   const fg = wrap.querySelector(".fg");
   const val = wrap.querySelector(".val");
   wrap.set = (v) => {

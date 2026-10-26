@@ -66,6 +66,7 @@ export function renderCaption(styleId, words, activeIdx, px, opts = {}) {
     if (upper) text = text.toUpperCase();
     const span = h("span", {}, text);
     const isActive = i === activeIdx;
+    if (w.emph && !isActive) span.style.color = state.settings?.brand_keyword_color || st.emph || st.active;
     if (st.effect === "karaoke") {
       if (i <= activeIdx) span.style.color = st.active;
     } else if (isActive && st.effect !== "fade") {

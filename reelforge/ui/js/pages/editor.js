@@ -4,6 +4,7 @@ import { go } from "../app.js";
 import { styleCard } from "../captions.js";
 import { Player } from "../editor/player.js";
 import { Timeline } from "../editor/timeline.js";
+import { addEffectAtPlayhead, brollInspector, effectInspector, viralPanel } from "../editor/viral.js";
 import { CSS_FILTERS, layout, newAudio, newClip, TRANSITION_ANIM, uid } from "../editor/model.js";
 import { importMedia, state } from "../state.js";
 import { bridge, btn, clear, debounce, field, fmtBytes, fmtTime, h, icon, modal, ring, segmented, select, slider, toast, toggle, timeAgo } from "../ui.js";
@@ -66,6 +67,21 @@ class Editor {
     this.renderInspector();
   }
 
+  /** Recarga el proyecto del motor (tras la edición automática). */
+  async reload() {
+    const [project, media] = await Promise.all([api.get(`/api/projects/${this.id}`), api.get("/api/media")]);
+    delete project.duration;
+    delete project.transitions_effective;
+    this.checkpoint();
+    this.project = project;
+    this.media.clear();
+    media.forEach((m) => this.media.set(m.id, m));
+    this.sel = null;
+    this.wordsVersion = (this.wordsVersion || 0) + 1;
+    this.refresh(false);
+    this.renderInspector();
+  }
+
   destroy() {
     document.removeEventListener("keydown", this.onKey);
     this.ro?.disconnect();
@@ -103,7 +119,8 @@ class Editor {
         btn("", { icon: "chevronL", cls: "ghost icon sm", title: "Inicio", onClick: () => this.player.seek(0) }),
         this.playBtn,
         btn("", { icon: "chevronR", cls: "ghost icon sm", title: "Final", onClick: () => this.player.seek(this.lay.total) }),
-        this.timeEl),
+        this.timeEl,
+        btn("Zonas seguras", { icon: "eye", cls: "ghost sm", title: "Muestra dónde tapan la interfaz de TikTok/Reels/Shorts", onClick: (e) => { this.player.toggleSafe(); e.currentTarget.classList.toggle("on"); } })),
     );
     this.inspector = h("div", { class: "inspector" });
     const right = h("div", { class: "panel right" }, this.inspector);
@@ -114,6 +131,9 @@ class Editor {
       btn("Dividir", { icon: "scissors", cls: "ghost sm", title: "Dividir en el cabezal (S)", onClick: () => this.split() }),
       btn("Duplicar", { icon: "copy", cls: "ghost sm", title: "Ctrl+D", onClick: () => this.duplicate() }),
       btn("Eliminar", { icon: "trash", cls: "ghost sm danger", title: "Supr", onClick: () => this.removeSelected() }),
+      btn("Zoom", { icon: "plus", cls: "ghost sm", title: "Zoom de impacto en el cabezal", onClick: () => addEffectAtPlayhead(this, "punch") }),
+      btn("Temblor", { icon: "plus", cls: "ghost sm", title: "Temblor de cámara en el cabezal", onClick: () => addEffectAtPlayhead(this, "shake") }),
+      btn("Flash", { icon: "plus", cls: "ghost sm", title: "Flash blanco en el cabezal", onClick: () => addEffectAtPlayhead(this, "flash") }),
       h("div", { class: "spacer" }),
       h("span", { class: "muted small" }, "Zoom"),
       this.zoomInput,
@@ -192,7 +212,7 @@ class Editor {
 
   selectedObj() {
     if (!this.sel) return null;
-    const list = { clip: this.project.clips, audio: this.project.audio, text: this.project.texts }[this.sel.type];
+    const list = { clip: this.project.clips, audio: this.project.audio, text: this.project.texts, broll: this.project.broll, effect: this.project.effects }[this.sel.type];
     return list?.find((x) => x.id === this.sel.id) || null;
   }
 
@@ -241,6 +261,8 @@ class Editor {
     const copy = { ...JSON.parse(JSON.stringify(obj)), id: uid() };
     if (this.sel.type === "clip") this.project.clips.splice(this.project.clips.indexOf(obj) + 1, 0, copy);
     else if (this.sel.type === "audio") { copy.start = obj.start + 0.5; this.project.audio.push(copy); }
+    else if (this.sel.type === "broll") { copy.start = obj.start + obj.duration; this.project.broll.push(copy); }
+    else if (this.sel.type === "effect") { copy.start = obj.start + 1; this.project.effects.push(copy); }
     else { const d = obj.end - obj.start; copy.start = obj.end; copy.end = obj.end + d; this.project.texts.push(copy); }
     this.commit();
     this.select(this.sel.type, copy.id);
@@ -250,7 +272,7 @@ class Editor {
     const obj = this.selectedObj();
     if (!obj) return;
     this.checkpoint();
-    const key = { clip: "clips", audio: "audio", text: "texts" }[this.sel.type];
+    const key = { clip: "clips", audio: "audio", text: "texts", broll: "broll", effect: "effects" }[this.sel.type];
     this.project[key] = this.project[key].filter((x) => x !== obj);
     this.sel = null;
     this.commit();
@@ -294,14 +316,14 @@ class Editor {
   }
 
   renderPanel() {
-    const tabs = [["media", "Medios", "image"], ["audio", "Audio", "music"], ["text", "Texto", "type"], ["captions", "Subtítulos", "captions"], ["transitions", "Transición", "shuffle"], ["filters", "Filtros", "palette"]];
+    const tabs = [["viral", "Viral", "zap"], ["media", "Medios", "image"], ["audio", "Audio", "music"], ["text", "Texto", "type"], ["captions", "Subs", "captions"], ["transitions", "Trans.", "shuffle"], ["filters", "Filtros", "palette"]];
     clear(this.tabsEl, tabs.map(([id, label, ic]) => h("button", { class: this.tab === id ? "on" : "", onclick: () => this.showTab(id) }, icon(ic, 17), label)));
     const body = h("div", { class: "col", style: { gap: "14px" } });
     clear(this.panelBody, body);
     this.panelBody.style.animation = "none";
     void this.panelBody.offsetWidth;
     this.panelBody.style.animation = "";
-    ({ media: () => this.mediaPanel(body), audio: () => this.audioPanel(body), text: () => this.textPanel(body), captions: () => this.captionsPanel(body), transitions: () => this.transitionsPanel(body), filters: () => this.filtersPanel(body) })[this.tab]();
+    ({ viral: () => viralPanel(this, body), media: () => this.mediaPanel(body), audio: () => this.audioPanel(body), text: () => this.textPanel(body), captions: () => this.captionsPanel(body), transitions: () => this.transitionsPanel(body), filters: () => this.filtersPanel(body) })[this.tab]();
   }
 
   mediaPanel(body) {
@@ -378,7 +400,20 @@ class Editor {
     if (!voiceItems.length && !videoClips.length) transcribeBtn.disabled = true;
     const words = h("div", { class: "words" });
     cap.words.slice(0, 400).forEach((w, i) => {
-      const el = h("span", { class: "word", contenteditable: "true", spellcheck: "false" }, w.w);
+      const el = h("span", { class: `word ${w.emph ? "emph" : ""}`, contenteditable: "true", spellcheck: "false", title: "Clic: editar · Clic derecho: palabra clave · Alt+clic: emoji", dataset: { emoji: w.emoji || "" } }, w.w);
+      el.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        this.change(() => { cap.words[i].emph = !cap.words[i].emph; this.wordsVersion = (this.wordsVersion || 0) + 1; });
+        el.classList.toggle("emph", !!cap.words[i].emph);
+      });
+      el.addEventListener("click", (e) => {
+        if (!e.altKey) return;
+        e.preventDefault();
+        const v = prompt("Emoji para esta palabra (vacío para quitarlo):", cap.words[i].emoji || "");
+        if (v === null) return;
+        this.change(() => { cap.words[i].emoji = v.trim() || null; this.wordsVersion = (this.wordsVersion || 0) + 1; });
+        el.dataset.emoji = v.trim();
+      });
       el.addEventListener("blur", () => {
         const v = el.textContent.trim();
         if (v && v !== w.w) this.change(() => { cap.words[i].w = v; this.wordsVersion = (this.wordsVersion || 0) + 1; });
@@ -483,6 +518,8 @@ class Editor {
     if (!obj) return this.projectInspector(root);
     if (this.sel.type === "clip") this.clipInspector(root, obj);
     else if (this.sel.type === "audio") this.audioInspector(root, obj);
+    else if (this.sel.type === "broll") brollInspector(this, root, obj);
+    else if (this.sel.type === "effect") effectInspector(this, root, obj);
     else this.textInspector(root, obj);
     root.append(h("div", { class: "row" }, btn("Duplicar", { icon: "copy", cls: "sm", onClick: () => this.duplicate() }), btn("Eliminar", { icon: "trash", cls: "sm danger", onClick: () => this.removeSelected() })));
   }
@@ -492,6 +529,7 @@ class Editor {
     root.append(
       h("div", { class: "ins-head" }, h("div", { class: "q-icon", style: { width: "40px", height: "40px", borderRadius: "10px", display: "grid", placeItems: "center", background: "rgba(124,92,255,.15)", color: "#c4b5fd" } }, icon("film", 19)), h("div", {}, h("b", {}, "Proyecto"), h("div", { class: "muted small" }, `${p.format.width}×${p.format.height} · ${fmtTime(this.lay.total)}`))),
       field("Fotogramas por segundo", segmented([[24, "24"], [30, "30"], [60, "60"]], p.format.fps, (v) => this.change(() => (p.format.fps = v)))),
+      h("div", { class: "toggle-row" }, h("div", {}, h("span", {}, "Kit de marca"), h("div", { class: "muted small" }, "Logo y @usuario al exportar (Ajustes → Marca)")), toggle(p.brand !== false, (v) => this.change(() => (p.brand = v)))),
       h("div", { class: "kv" }, h("span", {}, "Clips"), h("span", {}, p.clips.length), h("span", {}, "Pistas de audio"), h("span", {}, p.audio.length), h("span", {}, "Textos"), h("span", {}, p.texts.length), h("span", {}, "Palabras subtituladas"), h("span", {}, p.captions.words.length)),
       p.script?.hashtags ? h("div", { class: "card", style: { padding: "12px" } }, h("div", { class: "label" }, "Descripción sugerida"), h("p", { class: "small", style: { userSelect: "text" } }, p.script.caption || "", " ", (p.script.hashtags || []).join(" "))) : null,
       h("div", { class: "notice info" }, icon("info", 16), h("div", {}, "Atajos: ", h("span", { class: "kbd" }, "Espacio"), " reproducir, ", h("span", { class: "kbd" }, "S"), " dividir, ", h("span", { class: "kbd" }, "Supr"), " eliminar, ", h("span", { class: "kbd" }, "Ctrl+Z"), " deshacer, ", h("span", { class: "kbd" }, "Ctrl+rueda"), " zoom.")),
@@ -572,7 +610,7 @@ class Editor {
   exportDialog() {
     this.save.flush();
     const meta = this.meta;
-    const opts = { preset: state.settings.export_preset || "tiktok", resolution: "1080p", fps: this.project.format.fps, codec: "h264", quality: "high", hardware: true, subtitles_file: false, thumbnail: true, audio_only: false };
+    const opts = { preset: state.settings.export_preset || "tiktok", resolution: "1080p", fps: this.project.format.fps, codec: "h264", quality: "high", hardware: true, subtitles_file: false, thumbnail: true, audio_only: false, cover_text: this.project.script?.hook || "" };
     const apply = (id) => {
       opts.preset = id;
       if (meta.export_presets[id]) Object.assign(opts, { resolution: meta.export_presets[id].resolution, fps: meta.export_presets[id].fps, codec: meta.export_presets[id].codec, quality: meta.export_presets[id].quality });
@@ -595,6 +633,7 @@ class Editor {
         h("div", { class: "toggle-row" }, h("span", {}, "Exportar también subtítulos .SRT"), toggle(opts.subtitles_file, (v) => (opts.subtitles_file = v))),
         h("div", { class: "toggle-row" }, h("span", {}, "Generar portada (miniatura .JPG)"), toggle(opts.thumbnail, (v) => (opts.thumbnail = v))),
         h("div", { class: "toggle-row" }, h("span", {}, "Sólo audio (MP3)"), toggle(opts.audio_only, (v) => (opts.audio_only = v))),
+        field("Texto de la portada (opcional)", h("input", { class: "input", value: opts.cover_text, placeholder: "Ej.: EL SECRETO QUE NADIE CUENTA", oninput: (e) => (opts.cover_text = e.target.value) })),
       );
     };
     draw();

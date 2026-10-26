@@ -28,6 +28,18 @@ Interfaz oscura minimalista con animaciones en botones (ripple, brillo, resortes
 barra de trabajos en segundo plano con cancelación, y una **pantalla de carga animada** (logo que se dibuja,
 aurora giratoria, partículas, progreso real del arranque).
 
+## Automatización viral (nivel pro)
+
+| Función | Qué hace |
+| --- | --- |
+| **Edición viral en 1 clic** (Editor → pestaña *Viral*) | Quita silencios y muletillas usando los tiempos de cada palabra, alterna jump-zooms entre cortes, elige palabras clave (LLM o heurística) y las colorea con emojis encima, añade zooms de impacto, temblor y flash en el gancho, efectos de sonido sintetizados (whoosh, pop, boom, ding) y B-roll de tu biblioteca o generado con IA; ajusta los cortes al ritmo de la música. Repetible: sólo rehace lo automático. |
+| **Puntuación de retención** | 0-100 con 11 comprobaciones (gancho, duración, ritmo visual, tramos estáticos, subtítulos, velocidad de habla, palabras clave, música, efectos, llamada a la acción) y consejos concretos. |
+| **Clips virales** (página *Clips*) | Vídeo largo → varios reels: transcribe todo, la IA elige los momentos con más gancho (título, gancho y puntuación viral), reencuadra en vertical siguiendo la cara de quien habla (OpenCV YuNet, con suavizado y cortes de cámara) y aplica la edición viral a cada clip. «Exportar todos» en un clic. |
+| **Producción en lote** (página *Lote*) | Una lista de temas → reels guionizados, narrados, ilustrados, editados y exportados uno tras otro; si uno falla, el lote sigue. |
+| **Formatos virales** | Top N, ¿Sabías que…?, Historia en 3 actos, Mitos vs. realidad, Antes y después, Tutorial rápido y Opinión polémica, con estructura de guion, estilo de subtítulos y transición propios. |
+| **Kit de marca** (Ajustes) | Logo con posición/tamaño/opacidad, @usuario como marca de agua, color de palabras clave, llamada a la acción final, intro y outro automáticas. |
+| **Listo para publicar** | Zonas seguras de TikTok/Reels/Shorts en la vista previa, portada con texto grande y descripción con hashtags. |
+
 ## Instalación (Windows)
 
 ### Requisitos que instalas tú

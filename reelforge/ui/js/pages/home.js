@@ -54,10 +54,10 @@ export async function render(view) {
   const quick = h(
     "div",
     { class: "grid g4 stagger", style: { marginTop: "18px" } },
-    quickCard("wand", "Generar imagen o vídeo", "SDXL Lightning, Wan 2.1, LTX y Google Veo.", () => go("generate")),
+    quickCard("layers", "Producción en lote", "Una lista de temas → muchos reels exportados.", () => go("batch")),
     quickCard("mic", "Voz y narración", "Voces naturales en español con Kokoro o Edge.", () => go("voice")),
     quickCard("captions", "Subtítulos automáticos", "Transcribe y añade subtítulos animados a tu vídeo.", () => go("captions")),
-    quickCard("upload", "Importar medios", "Arrastra tus clips, fotos y música.", () => importMedia()),
+    quickCard("scissors", "Vídeo largo → clips", "Podcast o directo convertido en varios reels virales.", () => go("clips")),
   );
 
   const warnings = h("div", { class: "col", style: { marginTop: "16px" } });

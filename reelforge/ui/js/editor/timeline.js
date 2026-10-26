@@ -68,6 +68,19 @@ export class Timeline {
       }, icon(has ? "shuffle" : "plus", 12)));
     }
 
+    const broll = this.track("audio", "B-roll", "layers");
+    for (const b of ed.project.broll || []) {
+      const m = ed.media.get(b.media_id);
+      const el = this.rangeEl("broll", b, b.start, b.duration, m?.name || "B-roll", null);
+      if (m?.thumb) el.style.backgroundImage = `url(${fileUrl.thumb(m.id)})`;
+      broll.append(el);
+    }
+    const fx = this.track("fx", "Efectos", "zap");
+    for (const e of ed.project.effects || []) {
+      const mk = h("div", { class: `tl-fx ${e.type} ${ed.sel?.type === "effect" && ed.sel.id === e.id ? "sel" : ""}`, title: { punch: "Zoom de impacto", shake: "Temblor", flash: "Flash" }[e.type], style: { left: `${this.x(e.start)}px` } });
+      mk.addEventListener("pointerdown", (ev) => this.fxPointer(ev, e));
+      fx.append(mk);
+    }
     const texts = this.track("text", "Texto", "type");
     for (const t of ed.project.texts) texts.append(this.rangeEl("text", t, t.start, t.end - t.start, t.text.replace(/\|/g, " ")));
 
@@ -91,7 +104,7 @@ export class Timeline {
       (a.role === "music" ? music : voice).append(this.rangeEl(a.role, a, a.start, len, m?.name || "Audio", m));
     }
 
-    clear(this.inner, ruler, video, texts, caps, voice, music, this.insertMark, this.playhead);
+    clear(this.inner, ruler, video, broll, fx, texts, caps, voice, music, this.insertMark, this.playhead);
     this.inner.querySelectorAll(".tl-track").forEach((tr) => tr.addEventListener("pointerdown", (e) => {
       if (e.target === tr) {
         ed.select(null);
@@ -121,7 +134,7 @@ export class Timeline {
 
   rangeEl(kind, obj, start, len, label, media) {
     const ed = this.ed;
-    const type = kind === "text" ? "text" : "audio";
+    const type = kind === "text" ? "text" : kind === "broll" ? "broll" : "audio";
     const el = h("div", {
       class: `tl-item ${kind} ${ed.sel?.type === type && ed.sel.id === obj.id ? "sel" : ""}`,
       style: { left: `${this.x(start)}px`, width: `${Math.max(6, len * this.pps) - 2}px` },
@@ -222,7 +235,14 @@ export class Timeline {
       if (!moved) ed.checkpoint();
       moved = true;
       const dt = Math.round((dx / this.pps) * 20) / 20;
-      if (type === "text") {
+      if (type === "broll") {
+        if (handle === "l") {
+          const d = Math.max(-o.start, Math.min(dt, o.duration - 0.3));
+          obj.start = o.start + d;
+          obj.duration = o.duration - d;
+        } else if (handle === "r") obj.duration = Math.max(0.3, o.duration + dt);
+        else obj.start = Math.max(0, o.start + dt);
+      } else if (type === "text") {
         if (handle === "l") obj.start = Math.max(0, Math.min(o.end - 0.2, o.start + dt));
         else if (handle === "r") obj.end = Math.max(o.start + 0.2, o.end + dt);
         else {
@@ -247,6 +267,31 @@ export class Timeline {
       window.removeEventListener("pointerup", up);
       if (moved) ed.commit();
       else ed.select(type, obj.id);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  fxPointer(e, fx) {
+    e.stopPropagation();
+    const ed = this.ed;
+    ed.select("effect", fx.id, false);
+    const x0 = e.clientX;
+    const start = fx.start;
+    let moved = false;
+    const move = (ev) => {
+      const dx = ev.clientX - x0;
+      if (!moved && Math.abs(dx) < 3) return;
+      if (!moved) ed.checkpoint();
+      moved = true;
+      fx.start = Math.max(0, Math.round((start + dx / this.pps) * 100) / 100);
+      ed.refresh(false);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (moved) ed.commit();
+      else { ed.select("effect", fx.id); ed.player.seek(fx.start); }
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);

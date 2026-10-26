@@ -68,11 +68,11 @@ a { color: var(--a2); }
 
 /* ---------- barra lateral ---------- */
 .sidebar {
-  position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 12px 0; border-right: 1px solid var(--line); background: var(--bg);
+  position: relative; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 0; border-right: 1px solid var(--line); background: var(--bg);
 }
 .nav-item {
-  position: relative; z-index: 1; width: 60px; padding: 9px 0 7px; border-radius: 12px; border: 0;
+  position: relative; z-index: 1; flex: none; width: 60px; padding: 7px 0 6px; border-radius: 12px; border: 0;
   background: transparent; color: var(--muted); cursor: pointer; display: flex; flex-direction: column;
   align-items: center; gap: 4px; font-size: 10.5px; font-weight: 550; transition: color 0.2s, transform 0.2s var(--spring);
 }
@@ -311,7 +311,7 @@ input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.25); }
 @keyframes capPop { 0% { transform: scale(0.82); } 50% { transform: scale(1.2); } 100% { transform: scale(1.08); } }
 
 /* ---------- editor ---------- */
-.editor { display: grid; grid-template-rows: 54px minmax(0, 1fr) 250px; height: 100%; }
+.editor { display: grid; grid-template-rows: 54px minmax(0, 1fr) 290px; height: 100%; }
 .ed-top { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--bg); }
 .ed-top .name { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; font-weight: 650; font-size: 14px; width: 260px; outline: none; transition: all 0.2s; }
 .ed-top .name:hover { border-color: var(--line-2); }
@@ -436,3 +436,25 @@ code.inline { font: 12px var(--mono); padding: 2px 6px; border-radius: 6px; back
 .drop-zone:hover, .drop-zone.over { border-color: var(--a1); background: rgba(124, 92, 255, 0.06); color: var(--text); }
 @media (max-width: 1280px) { .ed-mid { grid-template-columns: 270px minmax(0, 1fr) 250px; } .g4 { grid-template-columns: repeat(2, 1fr); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+
+/* edición viral */
+.word.emph { background: rgba(57, 255, 106, 0.14); border-color: rgba(57, 255, 106, 0.5); color: #bbf7d0; }
+.word[data-emoji]:not([data-emoji=""])::after { content: attr(data-emoji); margin-left: 4px; }
+.tl-item.broll { background: linear-gradient(180deg, rgba(251, 146, 60, 0.5), rgba(160, 70, 20, 0.5)); background-size: cover; }
+.tl-fx { position: absolute; top: 3px; width: 16px; height: 16px; margin-left: -8px; transform: rotate(45deg); border-radius: 4px; cursor: grab; transition: transform 0.2s var(--spring), box-shadow 0.2s; z-index: 2; }
+.tl-fx:hover { transform: rotate(45deg) scale(1.25); }
+.tl-fx.punch { background: #fbbf24; } .tl-fx.shake { background: #f87171; } .tl-fx.flash { background: #fff; }
+.tl-fx.sel { box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.8); }
+.tl-track.fx { height: 22px; }
+.frame .media-wrap { position: absolute; inset: 0; transition: transform 0.06s linear; }
+.frame .broll-layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.12s; }
+.frame .flash-layer { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.frame .ov-emoji { position: absolute; left: 0; right: 0; text-align: center; transform: translateY(-100%); animation: capPop 0.3s var(--spring) both; font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif; }
+.frame .ov-handle { position: absolute; right: 4%; bottom: 7.5%; color: rgba(255, 255, 255, 0.75); font-weight: 800; text-shadow: 0 1px 3px #000; }
+.frame .ov-logo { position: absolute; opacity: 0.85; }
+.safe-zones { position: absolute; inset: 0; pointer-events: none; display: none; }
+.safe-zones.on { display: block; }
+.safe-zones div { position: absolute; background: rgba(248, 113, 113, 0.22); border: 1px dashed rgba(248, 113, 113, 0.7); }
+.safe-zones span { position: absolute; font-size: 9px; color: #fecaca; padding: 2px 4px; }
+.btn.on { background: rgba(124, 92, 255, 0.2); color: #fff; }
+.sidebar::-webkit-scrollbar { display: none; }
