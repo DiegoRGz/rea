@@ -19,11 +19,32 @@ from ..project import media_output_path, register_media
 
 def _client():
     from google import genai
+    from google.genai import types
 
     key = config.load_settings().get("gemini_api_key")
     if not key:
         raise RuntimeError("Añade tu clave de API de Google AI Studio en Ajustes → Google.")
-    return genai.Client(api_key=key)
+    # Sin reintentos ante 429: una cuota agotada o un nivel gratuito sin acceso no se
+    # arregla reintentando, y la librería lo haría en silencio durante minutos.
+    retry = types.HttpRetryOptions(attempts=2, http_status_codes=[500, 502, 503, 504])
+    return genai.Client(api_key=key, http_options=types.HttpOptions(retry_options=retry))
+
+
+def explain_error(exc: BaseException, service: str) -> str:
+    """Convierte los errores de la API de Google en un mensaje accionable."""
+    text = str(exc)
+    low = text.lower()
+    if "429" in text or "resource_exhausted" in low or "quota" in low or "too many requests" in low:
+        return (f"{service}: Google rechazó la petición por cuota (429). Si tu proyecto está en el nivel "
+                "gratuito, este modelo no está incluido o agotaste el límite: activa la facturación en "
+                "Google AI Studio (nivel de pago) o usa imágenes locales / Google Flow. Detalle: " + text[:300])
+    if "403" in text or "permission" in low or "billing" in low:
+        return f"{service}: tu clave no tiene permiso para este modelo (¿falta activar la facturación?). Detalle: {text[:300]}"
+    if "404" in text or "not found" in low:
+        return f"{service}: el modelo no existe o no está disponible para tu clave; revisa el id en Ajustes → Google. Detalle: {text[:300]}"
+    if "400" in text or "invalid" in low:
+        return f"{service}: Google rechazó los parámetros (formato, duración o resolución). Detalle: {text[:300]}"
+    return f"{service}: {text[:500]}"
 
 
 def generate_image(ctx: JobContext, prompt: str, aspect: str = "9:16", count: int = 1) -> list[dict]:
@@ -32,11 +53,14 @@ def generate_image(ctx: JobContext, prompt: str, aspect: str = "9:16", count: in
     ctx.progress(0.1, "Enviando a Imagen…")
     client = _client()
     model = config.load_settings()["google_image_model"]
-    resp = client.models.generate_images(
-        model=model,
-        prompt=prompt,
-        config=types.GenerateImagesConfig(number_of_images=max(1, min(4, count)), aspect_ratio=aspect),
-    )
+    try:
+        resp = client.models.generate_images(
+            model=model,
+            prompt=prompt,
+            config=types.GenerateImagesConfig(number_of_images=max(1, min(4, count)), aspect_ratio=aspect),
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(explain_error(exc, "Imagen")) from exc
     out_items = []
     for img in resp.generated_images or []:
         out = media_output_path(".png", "imagen")
@@ -100,7 +124,7 @@ def _omni_video(ctx: JobContext, model: str, prompt: str, aspect: str, image_pat
         ctx.progress(min(0.9, 0.05 + elapsed / 180), f"Gemini Omni generando… {int(elapsed)} s")
         worker.join(2)
     if "error" in result:
-        raise RuntimeError(f"Gemini Omni: {result['error']}")
+        raise RuntimeError(explain_error(result["error"], "Gemini Omni"))
     interaction = result["interaction"]
     video = getattr(interaction, "output_video", None)
     if video is None or not (video.data or video.uri):
@@ -133,7 +157,10 @@ def _veo_video(ctx: JobContext, model: str, prompt: str, aspect: str, image_path
     cfg = types.GenerateVideosConfig(aspect_ratio=aspect, number_of_videos=1,
                                      negative_prompt=negative or None)
     ctx.progress(0.05, "Enviando a Veo…")
-    op = client.models.generate_videos(model=model, prompt=prompt, config=cfg, **kwargs)
+    try:
+        op = client.models.generate_videos(model=model, prompt=prompt, config=cfg, **kwargs)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(explain_error(exc, "Veo")) from exc
     started = time.time()
     while not op.done:
         ctx.check()

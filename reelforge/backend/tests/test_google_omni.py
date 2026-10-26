@@ -42,3 +42,23 @@ def test_omni_flash_uses_interactions_api(mp4, tmp_path, monkeypatch):
     # La petición encaja con el esquema oficial del SDK.
     req = {k: v for k, v in calls.items() if k != "timeout"}
     CreateModelInteraction.model_validate(req)
+
+
+def test_quota_errors_fail_fast_with_actionable_message(monkeypatch):
+    config.save_settings({"gemini_api_key": "test-key", "google_video_model": "gemini-omni-1.1-flash"})
+
+    class Quota:
+        def create(self, **kwargs):
+            raise RuntimeError("429 RESOURCE_EXHAUSTED: quota exceeded for model gemini-omni-1.1-flash")
+
+    monkeypatch.setattr(google, "_client", lambda: SimpleNamespace(interactions=Quota()))
+    ctx = JobContext(Job(id="q", kind="google-video", title="t", lane="io"))
+    with pytest.raises(RuntimeError, match="nivel gratuito"):
+        google.generate_video(ctx, "a cat", "9:16")
+
+
+def test_client_does_not_retry_rate_limits():
+    config.save_settings({"gemini_api_key": "test-key"})
+    client = google._client()
+    retry = client._api_client._http_options.retry_options
+    assert 429 not in retry.http_status_codes and retry.attempts == 2
