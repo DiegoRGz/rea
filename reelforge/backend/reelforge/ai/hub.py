@@ -271,7 +271,7 @@ def generate_image(ctx: JobContext, model_id: str, prompt: str, aspect: str, cou
 
     m = entry(model_id)
     ctx.progress(0.03, f"Cargando {m['name']} (la primera vez se descarga)…")
-    pipe = gpu.acquire(model_id, lambda: _load(m["repo"]))
+    pipe = gpu.acquire(model_id, lambda: _load(m["repo"]), ctx, f"Cargando {m['name']}")
     w, h = {"9:16": (768, 1344), "4:5": (896, 1120), "1:1": (1024, 1024), "16:9": (1344, 768)}.get(aspect, (768, 1344))
     steps = steps or m.get("steps")
     guidance = guidance if guidance is not None else m.get("guidance")
@@ -297,7 +297,7 @@ def generate_video(ctx: JobContext, model_id: str, prompt: str, seconds: float, 
 
     m = entry(model_id)
     ctx.progress(0.03, f"Cargando {m['name']} (la primera vez se descarga)…")
-    pipe = gpu.acquire(model_id, lambda: _load(m["repo"]))
+    pipe = gpu.acquire(model_id, lambda: _load(m["repo"]), ctx, f"Cargando {m['name']}")
     fps = int(m.get("fps") or 16)
     frames = max(9, int(round(seconds * fps / 4)) * 4 + 1)
     w, h = (832, 480) if landscape else (480, 832)

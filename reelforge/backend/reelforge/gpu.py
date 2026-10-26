@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import threading
+from pathlib import Path
 from typing import Any, Callable
 
 from .ffmpeg import CREATE_NO_WINDOW
@@ -105,13 +106,47 @@ def device() -> str:
         return "cpu"
 
 
-def acquire(key: str, loader: Callable[[], Any]) -> Any:
-    """Devuelve el modelo `key`, descargando de la VRAM el anterior si es distinto."""
+def download_meter() -> Callable[[], str | None]:
+    """Devuelve una función que informa de cuánto ha crecido la caché de modelos."""
+    hub = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "hub"
+
+    def size() -> int:
+        total = 0
+        if hub.is_dir():
+            for root, _, files in os.walk(hub):
+                if os.path.basename(root) != "blobs":
+                    continue
+                for f in files:
+                    try:
+                        total += os.path.getsize(os.path.join(root, f))
+                    except OSError:
+                        pass
+        return total
+
+    base = size()
+
+    def detail() -> str | None:
+        grown = (size() - base) / 1024**2
+        return f"descargados {grown:,.0f} MB" if grown >= 1 else None
+
+    return detail
+
+
+def acquire(key: str, loader: Callable[[], Any], ctx: Any = None, label: str = "Cargando modelo") -> Any:
+    """Devuelve el modelo `key`, descargando de la VRAM el anterior si es distinto.
+
+    Con `ctx`, la carga (y la descarga inicial de pesos) muestra progreso vivo."""
     with _slot_lock:
         if _slot["key"] == key and _slot["model"] is not None:
             return _slot["model"]
         release()
-        model = loader()
+        if ctx is not None:
+            from .jobs import heartbeat
+
+            with heartbeat(ctx, f"{label} (la primera vez se descarga)", detail=download_meter(), expected=120):
+                model = loader()
+        else:
+            model = loader()
         _slot["key"], _slot["model"] = key, model
         return model
 

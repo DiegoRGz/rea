@@ -93,7 +93,7 @@ def generate(ctx: JobContext, prompt: str, model: str = "sdxl-lightning", aspect
     if gpu.device() != "cuda":
         ctx.progress(0.02, "Sin GPU CUDA: la generación en CPU será muy lenta")
     ctx.progress(0.05, "Cargando modelo de imagen (la primera vez se descarga)…")
-    pipe = gpu.acquire(f"image:{model}", lambda: _load(model))
+    pipe = gpu.acquire(f"image:{model}", lambda: _load(model), ctx, "Cargando modelo de imagen")
     width, height = ASPECTS.get(aspect, ASPECTS["9:16"])
     if model == "sdxl-turbo":
         width, height = int(width * 0.75) // 64 * 64, int(height * 0.75) // 64 * 64

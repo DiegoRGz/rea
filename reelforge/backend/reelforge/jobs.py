@@ -82,6 +82,52 @@ class JobContext:
 JobFn = Callable[[JobContext], Any]
 
 
+class heartbeat:
+    """Mantiene vivo el progreso durante un paso bloqueante (descargas, carga de
+    modelos): muestra el tiempo transcurrido y avanza la barra suavemente."""
+
+    def __init__(self, ctx: Any, message: str, start: float | None = None, end: float | None = None,
+                 detail: Callable[[], str | None] | None = None, expected: float = 90.0):
+        self.job: Job | None = getattr(ctx, "job", None)
+        self.message, self.detail, self.expected = message, detail, expected
+        base = self.job.progress if self.job else 0.0
+        self.start = base if start is None else start
+        self.end = min(0.95, self.start + 0.1) if end is None else end
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def _run(self) -> None:
+        import math
+
+        t0 = time.time()
+        while not self._stop.wait(1.0):
+            if not self.job:
+                return
+            elapsed = time.time() - t0
+            frac = 1 - math.exp(-elapsed / self.expected)
+            self.job.progress = self.start + (self.end - self.start) * frac * 0.95
+            extra = None
+            if self.detail:
+                try:
+                    extra = self.detail()
+                except Exception:  # noqa: BLE001
+                    extra = None
+            self.job.message = f"{self.message} · {int(elapsed)} s" + (f" · {extra}" if extra else "")
+
+    def __enter__(self) -> "heartbeat":
+        if self.job:
+            self.job.progress = self.start
+            self.job.message = self.message
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=2)
+
+
 class JobManager:
     LANES = ("gpu", "render", "io")
 

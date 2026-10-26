@@ -38,7 +38,17 @@ function markNav(id) {
   sidebar.querySelectorAll(".nav-item").forEach((b) => {
     const on = b.dataset.id === id;
     b.classList.toggle("active", on);
-    if (on) indicator.style.transform = `translateY(${b.offsetTop - 12}px)`;
+    if (!on) return;
+    // Primera colocación sin animación; después se desliza sin rebote.
+    if (!indicator.dataset.ready) indicator.style.transition = "none";
+    indicator.style.top = `${b.offsetTop}px`;
+    indicator.style.height = `${b.offsetHeight}px`;
+    indicator.style.transform = "none";
+    if (!indicator.dataset.ready) {
+      void indicator.offsetHeight;
+      indicator.style.transition = "";
+      indicator.dataset.ready = "1";
+    }
   });
 }
 
@@ -65,25 +75,59 @@ async function route() {
 function jobDock() {
   const dock = document.getElementById("jobdock");
   const hiddenDone = new Set();
+  const cards = new Map(); // id -> {el, parts}: se actualizan en el sitio para no re-animarse
+  const active = (j) => j.status === "running" || j.status === "queued";
+
+  const build = (j) => {
+    const status = h("span", { class: "job-status" });
+    const close = h("button", { class: "btn ghost icon sm" }, icon("x", 14));
+    close.onclick = () => (active(j) ? cancelJob(j.id) : (hiddenDone.add(j.id), remove(j.id)));
+    const fill = h("i");
+    const msg = h("div", { class: "job-msg" });
+    const el = h("div", { class: "job" },
+      h("div", { class: "job-head" }, status, h("span", { style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, j.title), close),
+      h("div", { class: "progress" }, fill),
+      msg);
+    return { el, status, close, fill, msg, state: null, job: j };
+  };
+
+  const update = (c, j) => {
+    c.job = j;
+    if (c.state !== j.status) {
+      c.state = j.status;
+      clear(c.status, active(j) ? h("div", { class: "spinner" }) : h("span", { style: { color: j.status === "done" ? "var(--ok)" : "var(--err)" } }, icon(j.status === "done" ? "check" : "alert", 15)));
+      c.close.title = active(j) ? "Cancelar" : "Cerrar";
+    }
+    c.fill.style.width = `${(j.status === "done" ? 1 : j.progress) * 100}%`;
+    const text = j.error || `${Math.round(j.progress * 100)}% · ${j.message}`;
+    if (c.msg.textContent !== text) {
+      c.msg.textContent = text;
+      c.msg.title = text;
+    }
+  };
+
+  const remove = (id) => {
+    const c = cards.get(id);
+    if (!c) return;
+    cards.delete(id);
+    c.el.classList.add("out");
+    setTimeout(() => c.el.remove(), 300);
+  };
+
   onJobs((jobs) => {
     const now = Date.now() / 1000;
-    const visible = jobs.filter((j) => j.status === "running" || j.status === "queued" || (j.finished && now - j.finished < 5 && !hiddenDone.has(j.id)));
-    clear(
-      dock,
-      visible.slice(0, 4).map((j) => {
-        const bar = h("div", { class: "progress" }, h("i", { style: { width: `${(j.status === "done" ? 1 : j.progress) * 100}%` } }));
-        const head = h(
-          "div",
-          { class: "job-head" },
-          j.status === "running" || j.status === "queued" ? h("div", { class: "spinner" }) : h("span", { style: { color: j.status === "done" ? "var(--ok)" : "var(--err)" } }, icon(j.status === "done" ? "check" : "alert", 15)),
-          h("span", { style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, j.title),
-          j.status === "running" || j.status === "queued"
-            ? h("button", { class: "btn ghost icon sm", title: "Cancelar", onclick: () => cancelJob(j.id) }, icon("x", 14))
-            : h("button", { class: "btn ghost icon sm", onclick: () => hiddenDone.add(j.id) }, icon("x", 14)),
-        );
-        return h("div", { class: "job" }, head, bar, h("div", { class: "job-msg", title: j.error || j.message }, j.error || `${Math.round(j.progress * 100)}% · ${j.message}`));
-      }),
-    );
+    const visible = jobs.filter((j) => active(j) || (j.finished && now - j.finished < (j.status === "error" ? 20 : 5) && !hiddenDone.has(j.id))).slice(0, 4);
+    const ids = new Set(visible.map((j) => j.id));
+    for (const id of [...cards.keys()]) if (!ids.has(id)) remove(id);
+    for (const j of visible) {
+      let c = cards.get(j.id);
+      if (!c) {
+        c = build(j);
+        cards.set(j.id, c);
+        dock.append(c.el);
+      }
+      update(c, j);
+    }
   });
 }
 

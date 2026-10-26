@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import config, gpu
-from ..jobs import JobContext
+from ..jobs import JobContext, heartbeat
 from ..project import media_output_path, register_media
 
 KOKORO_VOICES = [
@@ -70,14 +70,17 @@ def _kokoro(text: str, voice: str, speed: float, out: Path, ctx: JobContext) -> 
     # El "modelo" de la ranura es un dict de pipelines por idioma (comparten pesos).
     pipelines = gpu.acquire("kokoro", dict)
     if lang not in pipelines:
-        from kokoro import KPipeline
+        with heartbeat(ctx, "Preparando Kokoro (1.ª vez: ~330 MB y librerías)", 0.05, 0.25,
+                       detail=gpu.download_meter(), expected=90):
+            from kokoro import KPipeline
 
-        pipelines[lang] = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M", device=gpu.device())
+            pipelines[lang] = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M", device=gpu.device())
+            pipelines[lang].load_voice(voice)
     pipe = pipelines[lang]
     chunks = []
     paragraphs = [p for p in text.split("\n") if p.strip()] or [text]
     for i, para in enumerate(paragraphs):
-        ctx.progress(0.1 + 0.8 * i / len(paragraphs), f"Sintetizando {i + 1}/{len(paragraphs)}")
+        ctx.progress(0.3 + 0.6 * i / len(paragraphs), f"Sintetizando {i + 1}/{len(paragraphs)}")
         for _, _, audio in pipe(para, voice=voice, speed=speed, split_pattern=r"(?<=[.!?])\s+"):
             if audio is None:
                 continue
@@ -95,7 +98,7 @@ def _xtts(text: str, speaker_wav: str, lang: str, speed: float, out: Path, ctx: 
 
         return TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(gpu.device())
 
-    tts = gpu.acquire("xtts", load)
+    tts = gpu.acquire("xtts", load, ctx, "Cargando XTTS-v2")
     ctx.progress(0.3, "Clonando voz…")
     tts.tts_to_file(text=text, speaker_wav=speaker_wav, language=lang or "es", file_path=str(out), speed=speed)
 

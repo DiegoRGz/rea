@@ -110,7 +110,7 @@ def generate(ctx: JobContext, prompt: str, model: str = "wan2.1-1.3b", seconds: 
     if gpu.device() != "cuda":
         raise RuntimeError("La generación de vídeo local necesita una GPU NVIDIA con CUDA.")
     ctx.progress(0.03, "Cargando modelo de vídeo (la primera descarga puede tardar)…")
-    holder: _Holder = gpu.acquire(f"video:{model}", lambda: _load(model))
+    holder: _Holder = gpu.acquire(f"video:{model}", lambda: _load(model), ctx, "Cargando modelo de vídeo")
     pipe = holder.pipe
 
     ctx.progress(0.1, "Codificando el prompt en CPU…")

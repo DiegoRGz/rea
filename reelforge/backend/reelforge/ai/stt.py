@@ -45,7 +45,7 @@ def transcribe_file(ctx: JobContext, path: str, model: str = "large-v3-turbo", l
     errors = []
     for device in (["cuda", "cpu"] if gpu.device() == "cuda" else ["cpu"]):
         try:
-            whisper = gpu.acquire(f"whisper:{model}:{device}", lambda: _load(model, device))
+            whisper = gpu.acquire(f"whisper:{model}:{device}", lambda: _load(model, device), ctx, f"Cargando Whisper {model}")
             segments, info = whisper.transcribe(
                 str(wav),
                 language=language or None,

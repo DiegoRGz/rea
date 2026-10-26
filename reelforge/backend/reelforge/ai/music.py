@@ -31,7 +31,7 @@ def generate(ctx: JobContext, prompt: str, seconds: float = 20, model: str = "mu
     import torch
 
     ctx.progress(0.05, "Cargando MusicGen…")
-    processor, mg = gpu.acquire(f"music:{model}", lambda: _load(model))
+    processor, mg = gpu.acquire(f"music:{model}", lambda: _load(model), ctx, "Cargando MusicGen")
     seconds = max(4.0, min(30.0, float(seconds)))
     tokens = int(seconds * 50)  # ~50 tokens por segundo de audio
     ctx.progress(0.2, f"Componiendo {seconds:.0f} s de música…")

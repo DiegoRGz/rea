@@ -68,7 +68,7 @@ a { color: var(--a2); }
 
 /* ---------- barra lateral ---------- */
 .sidebar {
-  position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 12px 0; border-right: 1px solid var(--line); background: var(--bg);
 }
 .nav-item {
@@ -85,7 +85,7 @@ a { color: var(--a2); }
   position: absolute; left: 8px; width: 60px; height: 56px; border-radius: 12px; z-index: 0;
   background: linear-gradient(135deg, rgba(124, 92, 255, 0.22), rgba(255, 77, 157, 0.14));
   box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.35), 0 6px 24px -8px rgba(124, 92, 255, 0.6);
-  transition: transform 0.45s var(--spring), height 0.3s var(--ease); pointer-events: none;
+  transition: top 0.42s var(--ease), height 0.3s var(--ease); pointer-events: none;
 }
 .nav-indicator::before {
   content: ""; position: absolute; left: -8px; top: 30%; bottom: 30%; width: 3px; border-radius: 0 3px 3px 0; background: var(--grad);
@@ -229,6 +229,7 @@ input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.25); }
 .jobdock { position: fixed; right: 18px; bottom: 18px; z-index: 90; width: 340px; display: flex; flex-direction: column; gap: 8px; }
 .job { padding: 12px 14px; border-radius: 12px; background: rgba(24, 24, 33, 0.94); backdrop-filter: blur(14px); border: 1px solid var(--line-2); box-shadow: var(--shadow); animation: toastIn 0.45s var(--spring) both; }
 .job .job-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; font-size: 12.5px; }
+.job.out { animation: toastOut 0.3s var(--ease) forwards; }
 .job .job-msg { font-size: 11.5px; color: var(--muted); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(124, 92, 255, 0.25); border-top-color: var(--a1); animation: spin 0.8s linear infinite; flex: none; }
 
