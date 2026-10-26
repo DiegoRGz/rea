@@ -164,7 +164,20 @@ def download_fonts(ctx: JobContext) -> list[dict]:
     return fonts_status()
 
 
+def _genai_supports_omni() -> bool:
+    try:
+        from importlib.metadata import version
+
+        major, minor = (int(x) for x in version("google-genai").split(".")[:2])
+        return (major, minor) >= (2, 33)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 EXTRAS = {
+    "google": {"name": "Google GenAI actualizado (Gemini Omni Flash)", "packages": ["-U", "google-genai>=2.33"],
+               "module": "google.genai", "check": _genai_supports_omni,
+               "note": "Necesario para generar vídeo con gemini-omni-1.1-flash."},
     "xtts": {"name": "Clonación de voz XTTS-v2", "packages": ["coqui-tts>=0.24"], "module": "TTS",
              "note": "Licencia CPML (no comercial). ~2 GB adicionales al primer uso."},
     "ai": {"name": "Paquete de IA local completo", "packages": ["-r", str(config.BACKEND_DIR / "requirements-ai.txt")],
@@ -173,7 +186,8 @@ EXTRAS = {
 
 
 def extras_status() -> list[dict]:
-    return [{"id": k, **{kk: vv for kk, vv in v.items() if kk != "packages"}, "installed": gpu.has_module(v["module"])}
+    return [{"id": k, **{kk: vv for kk, vv in v.items() if kk not in ("packages", "check")},
+             "installed": v["check"]() if "check" in v else gpu.has_module(v["module"])}
             for k, v in EXTRAS.items()]
 
 

@@ -19,7 +19,7 @@ Pensado y dimensionado para: **Intel i5-13420H · NVIDIA RTX 5050 Laptop 8 GB ·
 | **Transcripción** | Tiempos por palabra, exportación SRT/VTT/TXT, subtítulos automáticos para tus propios vídeos. | faster-whisper large-v3-turbo (GPU con respaldo a CPU) |
 | **Subtítulos virales** | 7 estilos animados palabra a palabra: Viral (Hormozi), Beast, Resaltado, Karaoke, Una palabra, Neón, Minimalista. Posición, tamaño, mayúsculas, edición del texto. | ASS + libass |
 | **Generar** | Imágenes 9:16 en segundos, vídeo de texto o de imagen, música de fondo. | SDXL Lightning/Turbo, Wan 2.1 1.3B, LTX-Video, MusicGen |
-| **Google** | Ventana de **Google Flow** con tu cuenta (importa automáticamente lo que descargues) + **Imagen 4 / Veo 3** por API. | Gemini API |
+| **Google** | Ventana de **Google Flow** con tu cuenta (importa automáticamente lo que descargues) + **Imagen 4**, **Gemini Omni Flash** y **Veo** por API. | Gemini API |
 | **Exportación** | Preajustes TikTok / Reels / Shorts / Borrador / Máster 4K o personalizado: 540p–2160p, 24/30/60 fps, H.264 / H.265 / AV1, 4 niveles de calidad, NVENC, SRT y portada JPG, sólo audio MP3. | FFmpeg (NVENC en RTX) |
 | **Modelos** | Descarga con progreso, estado de VRAM, perfil recomendado, fuentes OFL para subtítulos, instalación de extras. | Hugging Face Hub |
 
@@ -87,8 +87,10 @@ en tu nombre. ReelForge ofrece las dos vías legítimas:
    biblioteca, lista para el editor. ReelForge no lee ni automatiza tu sesión. Si Google bloquea el inicio de
    sesión en la ventana integrada, usa Flow en tu navegador e importa los archivos con *Importar*.
 2. **API de Gemini** (Ajustes → Google): con una clave de [Google AI Studio](https://aistudio.google.com/apikey)
-   generas con **Imagen 4** y **Veo 3** (los modelos de Flow) desde *Generar* y desde el *Reel automático*.
-   Tiene coste según la tarifa de Google; los nombres de modelo son editables en Ajustes.
+   generas con **Imagen 4** y vídeo con **Gemini Omni 1.1 Flash** (`gemini-omni-1.1-flash`, por defecto) o **Veo**
+   desde *Generar* y desde el *Reel automático*. Omni Flash usa la API *Interactions* de `google-genai` ≥ 2.33
+   (Modelos → Paquetes → «Google GenAI actualizado» si tu instalación es anterior) y requiere el nivel de pago de
+   la API. Tiene coste según la tarifa de Google; el modelo se elige en Ajustes → Google.
 
 ## ¿Y el repositorio REA?
 

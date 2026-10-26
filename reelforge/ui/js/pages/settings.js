@@ -7,6 +7,23 @@ export async function render(view) {
   const s = { ...(await api.get("/api/settings")) };
   const meta = state.meta;
   const input = (key, opts = {}) => h("input", { class: "input", type: opts.type || "text", value: s[key] ?? "", placeholder: opts.placeholder || "", oninput: (e) => (s[key] = e.target.value) });
+  const VIDEO_MODELS = [
+    ["gemini-omni-1.1-flash", "Gemini Omni 1.1 Flash (recomendado)"],
+    ["veo-3.1-generate-preview", "Veo 3.1"],
+    ["veo-3.0-generate-001", "Veo 3"],
+    ["veo-3.0-fast-generate-001", "Veo 3 Fast"],
+  ];
+  const videoModel = () => {
+    const custom = h("input", { class: "input", value: s.google_video_model, placeholder: "id del modelo", oninput: (e) => (s.google_video_model = e.target.value) });
+    const known = VIDEO_MODELS.some(([id]) => id === s.google_video_model);
+    if (known) custom.classList.add("hidden");
+    const sel = select([...VIDEO_MODELS, ["__custom", "Otro (escribir id)…"]], known ? s.google_video_model : "__custom", (v) => {
+      custom.classList.toggle("hidden", v !== "__custom");
+      if (v !== "__custom") s.google_video_model = v;
+      else custom.focus();
+    });
+    return h("div", { class: "col", style: { gap: "8px" } }, sel, custom);
+  };
   const ttsVoices = () => (meta.tts.voices[s.tts_engine] || []).map((v) => [v.id, v.name]);
   const voiceSel = h("div");
   const drawVoice = () => voiceSel.replaceChildren(select(ttsVoices(), s.tts_voice, (v) => (s.tts_voice = v)));
@@ -46,7 +63,7 @@ export async function render(view) {
         field("Modelo de Gemini", input("gemini_text_model"))),
       section("Google (Imagen, Veo, Gemini)", "key",
         field("Clave de API de Google AI Studio", input("gemini_api_key", { type: "password", placeholder: "AIza…" }), "Se guarda sólo en tu PC (settings.json)."),
-        h("div", { class: "grid g2" }, field("Modelo de imagen", input("google_image_model")), field("Modelo de vídeo", input("google_video_model"))),
+        h("div", { class: "grid g2" }, field("Modelo de imagen", input("google_image_model")), field("Modelo de vídeo", videoModel())),
         btn("Obtener una clave", { icon: "external", cls: "sm ghost", onClick: () => bridge.openExternal("https://aistudio.google.com/apikey") })),
       section("Rutas", "folder",
         field("Carpeta de FFmpeg (opcional)", input("ffmpeg_path", { placeholder: "C:\\ffmpeg\\bin" }), state.health.ffmpeg.ffmpeg ? `En uso: ${state.health.ffmpeg.ffmpeg}` : "FFmpeg no encontrado"),

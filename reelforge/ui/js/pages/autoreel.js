@@ -184,7 +184,7 @@ function stepVisuals(body, show) {
     ["image", "image", "Imágenes IA (local)", "SDXL en tu GPU. Rápido: ~5-15 s por escena. Con zoom/paneo animado."],
     ["video", "video", "Vídeo IA (local)", "Wan 2.1 en tu GPU. Muy lento en 8 GB (varios minutos por escena)."],
     ["google-image", "cloud", "Google Imagen", "Requiere clave de API de Google AI Studio."],
-    ["google-video", "cloud", "Google Veo", "Vídeo con sonido de alta calidad. Requiere clave y tiene coste."],
+    ["google-video", "cloud", "Google vídeo", "Gemini Omni Flash o Veo (según Ajustes). Requiere clave y tiene coste."],
     ["library", "folder", "Mis archivos", "Asigna tus propias fotos o clips a cada escena."],
   ];
   const opts = h("div");

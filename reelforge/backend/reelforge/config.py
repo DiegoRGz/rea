@@ -51,7 +51,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "gemini_api_key": "",
     "gemini_text_model": "gemini-2.5-flash",
     "google_image_model": "imagen-4.0-generate-001",
-    "google_video_model": "veo-3.0-fast-generate-001",
+    "google_video_model": "gemini-omni-1.1-flash",
     "tts_engine": "kokoro",
     "tts_voice": "ef_dora",
     "whisper_model": "large-v3-turbo",

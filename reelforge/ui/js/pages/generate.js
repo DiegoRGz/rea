@@ -81,18 +81,23 @@ function imageTab(body, reload) {
 
 function videoTab(body, reload) {
   const vm = state.meta.video.models;
-  const o = { provider: "local", model: "wan2.1-1.3b", seconds: 3, image: "", aspect: "9:16" };
+  const o = { provider: "local", model: "wan2.1-1.3b", seconds: 3, image: "", aspect: "9:16", gDuration: 0, gResolution: "" };
+  const gModel = state.settings.google_video_model || "";
+  const isOmni = gModel.startsWith("gemini-omni");
   const { ta, improve } = promptBox("Primer plano de una taza de café humeante, cámara lenta, luz de mañana…");
   const opts = h("div", { class: "col", style: { gap: "14px" } });
   const drawOpts = async () => {
     const images = (await api.get("/api/media?kind=image")).slice(0, 80);
     const needsImage = o.provider === "local" && vm[o.model]?.mode === "i2v";
     clear(opts,
-      field("Motor", segmented([["local", "Local (GPU)"], ["google", "Google Veo"]], o.provider, (v) => { o.provider = v; drawOpts(); })),
+      field("Motor", segmented([["local", "Local (GPU)"], ["google", isOmni ? "Google Omni Flash" : "Google Veo"]], o.provider, (v) => { o.provider = v; drawOpts(); })),
       o.provider === "local" ? field("Modelo", select(Object.entries(vm).map(([k, v]) => [k, v.name]), o.model, (v) => { o.model = v; drawOpts(); })) : field("Formato", segmented([["9:16", "9:16"], ["16:9", "16:9"]], o.aspect, (v) => (o.aspect = v))),
       o.provider === "local" ? field("Duración", slider(o.seconds, 1, 5, 0.5, (v) => (o.seconds = v), (v) => `${v} s`)) : null,
+      o.provider === "google" && isOmni ? h("div", { class: "grid g2" },
+        field("Duración", select([[0, "Automática"], ...[4, 6, 8, 10].map((n) => [n, `${n} s`])], o.gDuration, (v) => (o.gDuration = Number(v)))),
+        field("Resolución", select([["", "Por defecto (720p)"], ["720p", "720p"], ["1080p", "1080p"], ["4k", "4K"]], o.gResolution, (v) => (o.gResolution = v)))) : null,
       field(needsImage ? "Imagen de partida (obligatoria)" : "Imagen de partida (opcional)", select([["", "— Ninguna —"], ...images.map((m) => [m.id, m.name])], o.image, (v) => (o.image = v))),
-      o.provider === "local" ? h("div", { class: "notice" }, icon("clock", 16), h("div", {}, "En una RTX 5050 (8 GB) un clip de 3 s tarda varios minutos. Para reels rápidos usa imágenes con movimiento (Ken Burns) o Google Veo.")) : h("div", { class: "notice info" }, icon("cloud", 16), "Veo genera en la nube de Google con tu clave de API (consulta precios en Google AI Studio)."),
+      o.provider === "local" ? h("div", { class: "notice" }, icon("clock", 16), h("div", {}, "En una RTX 5050 (8 GB) un clip de 3 s tarda varios minutos. Para reels rápidos usa imágenes con movimiento (Ken Burns) o Google Veo.")) : h("div", { class: "notice info" }, icon("cloud", 16), `${isOmni ? "Gemini Omni Flash" : "Veo"} genera en la nube de Google con tu clave de API (modelo ${gModel}; consulta precios en Google AI Studio). Cámbialo en Ajustes → Google.`),
     );
   };
   drawOpts();
@@ -101,7 +106,7 @@ function videoTab(body, reload) {
     if (!ta.value.trim()) return toast("Describe el vídeo", "info");
     go_.classList.add("loading");
     try {
-      if (o.provider === "google") await runJob(api.post("/api/google/video", { prompt: ta.value, aspect: o.aspect, image_media_id: o.image || null }));
+      if (o.provider === "google") await runJob(api.post("/api/google/video", { prompt: ta.value, aspect: o.aspect, image_media_id: o.image || null, duration: o.gDuration || null, resolution: o.gResolution || null }));
       else await runJob(api.post("/api/video", { prompt: ta.value, model: o.model, seconds: o.seconds, image_media_id: o.image || null }));
       toast("Vídeo listo", "ok");
       reload();

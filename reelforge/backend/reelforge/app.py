@@ -472,6 +472,8 @@ class GoogleVideoBody(BaseModel):
     aspect: str = "9:16"
     image_media_id: Optional[str] = None
     negative: str = ""
+    duration: Optional[int] = None
+    resolution: Optional[str] = None
 
 
 @app.post("/api/google/image")
@@ -483,8 +485,9 @@ def google_image(b: GoogleImageBody) -> dict:
 @app.post("/api/google/video")
 def google_video(b: GoogleVideoBody) -> dict:
     img = _media_or_404(b.image_media_id).path if b.image_media_id else None
-    return _job("google-video", f"Veo: {b.prompt[:30]}",
-                lambda ctx: google.generate_video(ctx, b.prompt, b.aspect, img, b.negative), "io")
+    return _job("google-video", f"Google vídeo: {b.prompt[:30]}",
+                lambda ctx: google.generate_video(ctx, b.prompt, b.aspect, img, b.negative, b.duration,
+                                                  b.resolution), "io")
 
 
 @app.post("/api/autoreel")
