@@ -57,11 +57,12 @@ class Upscaler:
     def upscale(self, image: Image.Image, width: int, status=lambda _msg: None, should_cancel=lambda: False) -> Image.Image:
         """Reescala al ancho indicado (proporción 2:1) conservando la continuidad 360°."""
         height = width // 2
-        if width <= image.width or not self._load(status):
+        # Para ampliaciones pequeñas Lanczos basta y evita una imagen intermedia x4 enorme.
+        if width < image.width * 1.5 or not self._load(status):
             return image.resize((width, height), Image.Resampling.LANCZOS)
         model = self._model
         scale = int(self.config.get("scale", 4))
-        dtype = next(model.model.parameters()).dtype if hasattr(model, "model") else torch.float32
+        dtype = model.dtype
         pixels = torch.from_numpy(np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0)
         pixels = pixels.permute(2, 0, 1)[None].to(self.device)
 

@@ -76,6 +76,7 @@ def tile_starts(length: int, tile: int, overlap: int, align: int, wrap: bool) ->
     Con ``wrap`` siempre hay al menos dos mosaicos, así ningún mosaico tiene su
     propio borde izquierdo pegado al derecho y todos reciben contexto real.
     """
+    overlap = min(overlap, tile // 2)
     if not wrap:
         if length <= tile:
             return [0], length
@@ -90,14 +91,18 @@ def tile_starts(length: int, tile: int, overlap: int, align: int, wrap: bool) ->
     return starts, tile
 
 
-def _ramp(size: int, ramp: int, device: torch.device) -> torch.Tensor:
+def _ramp(size: int, ramp: int, taper_start: bool, taper_end: bool, device: torch.device) -> torch.Tensor:
+    """Peso 1D de un mosaico: 0 junto a los bordes interiores (contaminados por el relleno
+    de la red), subida suave en el solape y 1 en el centro. Los bordes reales de la imagen
+    sin continuidad no se atenúan porque ningún otro mosaico los cubre."""
     position = torch.arange(size, device=device, dtype=torch.float32) + 0.5
-    distance = torch.minimum(position, size - position)
-    return (distance / max(ramp, 1)).clamp(1e-3, 1.0)
-
-
-def tile_weights(height: int, width: int, ramp: int, device: torch.device) -> torch.Tensor:
-    return _ramp(height, ramp, device)[:, None] * _ramp(width, ramp, device)[None, :]
+    margin = ramp / 4
+    weights = torch.ones(size, device=device)
+    for enabled, distance in ((taper_start, position), (taper_end, size - position)):
+        if enabled:
+            t = ((distance - margin) / max(ramp - margin, 1.0)).clamp(0.0, 1.0)
+            weights = weights * (t * t * (3 - 2 * t))
+    return weights.clamp_min(1e-6)
 
 
 def tiled_apply(
@@ -134,7 +139,10 @@ def tiled_apply(
             if out is None:
                 out = torch.zeros((batch, result.shape[1], out_h, out_w), dtype=torch.float32, device=out_device)
             res_h, res_w = result.shape[-2:]
-            weights = tile_weights(res_h, res_w, ramp, torch.device(out_device))
+            device = torch.device(out_device)
+            wy = _ramp(res_h, ramp, y0 != y_starts[0], y0 != y_starts[-1], device)
+            wx = _ramp(res_w, ramp, wrap_x or x0 != x_starts[0], wrap_x or x0 != x_starts[-1], device)
+            weights = wy[:, None] * wx[None, :]
             oy0 = round(y0 * scale)
             out_columns = torch.arange(round(x0 * scale), round(x0 * scale) + res_w, device=out_device) % out_w
             out[:, :, oy0 : oy0 + res_h].index_add_(3, out_columns, result * weights)

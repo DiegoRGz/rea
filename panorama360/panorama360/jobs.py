@@ -48,13 +48,13 @@ class Job:
 
 
 class JobQueue:
-    def __init__(self, engine, queue_file: Path = QUEUE_FILE):
+    def __init__(self, engine, queue_file: Path = QUEUE_FILE, paused: bool = False):
         self.engine = engine
         self.queue_file = queue_file
         self.jobs: list[Job] = []
         self.lock = threading.RLock()
         self.wake = threading.Event()
-        self.paused = False
+        self.paused = paused
         self._cancel_running = False
         self._restore()
         self.worker = threading.Thread(target=self._run, name="panorama-worker", daemon=True)
@@ -153,10 +153,7 @@ class JobQueue:
             pending = [job for job in self.jobs if job.status == PENDING]
             if not pending:
                 return None
-            # Mantiene el orden, pero prefiere el modelo ya cargado para no recargar en cada cambio
-            # cuando hay trabajos de varios modelos intercalados (p. ej. comparaciones).
-            loaded = self.engine.model_key
-            job = next((j for j in pending if j.request["model_key"] == loaded and j.batch == pending[0].batch), pending[0])
+            job = pending[0]
             job.status, job.progress, job.message = RUNNING, 0.0, "Iniciando…"
             self._cancel_running = False
             return job
@@ -233,8 +230,8 @@ def _friendly_error(exc: Exception) -> str:
     lowered = text.lower()
     if "out of memory" in lowered:
         return "Memoria de video insuficiente: elige un perfil más bajo en Sistema o una resolución menor."
-    if "401" in lowered or "gated" in lowered or "403" in lowered:
-        return "El modelo requiere aceptar su licencia en Hugging Face o iniciar sesión (huggingface-cli login)."
-    if "connection" in lowered or "resolve" in lowered or "offline" in lowered:
+    if any(word in lowered for word in ("connection", "resolve", "offline", "proxy", "timed out")):
         return "Sin conexión para descargar el modelo. Conéctate a internet la primera vez que uses cada modelo."
+    if "401" in lowered or "gated" in lowered or "403" in lowered:
+        return "El modelo requiere aceptar su licencia en Hugging Face o iniciar sesión (hf auth login)."
     return f"{type(exc).__name__}: {text[:300]}"

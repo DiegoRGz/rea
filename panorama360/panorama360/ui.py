@@ -160,7 +160,6 @@ class App:
             req = job.request
             model = self.catalog.models.get(req["model_key"])
             rows.append([
-                job.id,
                 f"{STATUS_ICON.get(job.status, '')} {job.status}",
                 f"{job.progress * 100:.0f}%",
                 (f"🧪 {job.sample_name}" if job.sample_name else req["prompt"][:70]),
@@ -168,7 +167,7 @@ class App:
                 req["seed"],
                 job.message,
             ])
-        return rows or [["", "", "", "La cola está vacía", "", "", ""]]
+        return rows or [["", "", "La cola está vacía", "", "", ""]]
 
     def recent_results(self):
         files = list_outputs(60)
@@ -235,13 +234,13 @@ def build(app: App) -> gr.Blocks:
                             model = gr.Dropdown(catalog.choices(), value=default_key, label="1 · Modelo")
                             card = gr.Markdown(model_card(catalog.get(default_key)))
                             samples = gr.Gallery(
-                                label="Muestras de este modelo (generadas en tu equipo)", columns=2, height=200,
+                                label="Muestras de este modelo (se generan en tu equipo con «Generar muestra»)", columns=2, height=200,
                                 object_fit="cover", allow_preview=True, show_label=True,
                             )
-                            with gr.Row():
+                            with gr.Row(equal_height=True):
                                 sample_label = gr.Dropdown(list(SAMPLE_PROMPTS), value=next(iter(SAMPLE_PROMPTS)),
                                                            label="Escena de prueba", scale=3)
-                                sample_btn = gr.Button("🧪 Generar muestra", scale=2)
+                                sample_btn = gr.Button("🧪 Generar muestra", scale=2, variant="secondary")
                         with gr.Group():
                             prompt = gr.Textbox(
                                 label="2 · Describe la escena", lines=3,
@@ -292,7 +291,7 @@ def build(app: App) -> gr.Blocks:
                             retry_btn = gr.Button("↻ Reintentar fallidas", size="sm")
                             clear_btn = gr.Button("🧹 Limpiar terminadas", size="sm")
                         queue_table = gr.Dataframe(
-                            headers=["ID", "Estado", "Progreso", "Escena", "Modelo", "Semilla", "Detalle"],
+                            headers=["Estado", "%", "Escena", "Modelo", "Semilla", "Detalle"],
                             value=app.queue_rows(), interactive=False, wrap=True, max_height=260,
                         )
                         results = gr.Gallery(label="Resultados recientes", columns=3, height=420, object_fit="cover",

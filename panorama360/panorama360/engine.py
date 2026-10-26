@@ -326,7 +326,7 @@ class Engine:
             if tiled:
                 set_seamless(unet, False)
                 noise_pred = tiled_apply(
-                    model_input, lambda patch: self._predict(patch, t, cond), scale=1, tile=tile,
+                    model_input, lambda patch, t=t: self._predict(patch, t, cond), scale=1, tile=tile,
                     overlap=tile // 4, align=1, wrap_x=True, out_device=self.device,
                 )
             else:
