@@ -79,7 +79,13 @@ def _load(model_id: str):
 
 
 def generate(ctx: JobContext, prompt: str, model: str = "sdxl-lightning", aspect: str = "9:16", count: int = 1,
-             seed: int | None = None, style: str = "none", negative: str = "") -> list[dict]:
+             seed: int | None = None, style: str = "none", negative: str = "", steps: int | None = None,
+             guidance: float | None = None) -> list[dict]:
+    if model.startswith("hf:"):
+        from . import hub
+
+        full = ", ".join(p for p in [prompt.strip(), STYLE_PRESETS.get(style, "")] if p)
+        return hub.generate_image(ctx, model, full, aspect, count, seed, negative, steps, guidance)
     import torch
 
     if model not in MODELS:

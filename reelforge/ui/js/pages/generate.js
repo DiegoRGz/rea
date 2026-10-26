@@ -49,12 +49,15 @@ function promptBox(placeholder) {
 
 function imageTab(body, reload) {
   const im = state.meta.image;
-  const o = { provider: "local", model: state.settings.image_model in im.models ? state.settings.image_model : "sdxl-lightning", aspect: "9:16", count: 2, style: "cinematic", seed: "" };
+  const o = { provider: "local", model: state.settings.image_model in im.models ? state.settings.image_model : "sdxl-lightning", aspect: "9:16", count: 2, style: "cinematic", seed: "", steps: "", guidance: "" };
   const { ta, improve } = promptBox("Un astronauta caminando por un mercado nocturno de Tokio, lluvia, luces de neón…");
   const opts = h("div", { class: "col", style: { gap: "14px" } });
   const drawOpts = () => clear(opts,
     field("Motor", segmented([["local", "Local (GPU)"], ["google", "Google Imagen"]], o.provider, (v) => { o.provider = v; drawOpts(); })),
-    o.provider === "local" ? field("Modelo", select(Object.entries(im.models).map(([k, v]) => [k, v.name]), o.model, (v) => (o.model = v))) : null,
+    o.provider === "local" ? field("Modelo", select(Object.entries(im.models).map(([k, v]) => [k, v.name]), o.model, (v) => { o.model = v; drawOpts(); })) : null,
+    o.provider === "local" && o.model.startsWith("hf:") ? h("div", { class: "grid g2" },
+      field("Pasos", h("input", { class: "input", type: "number", min: 1, max: 80, placeholder: `Auto (${im.models[o.model]?.steps ?? "por defecto"})`, value: o.steps, oninput: (e) => (o.steps = e.target.value) })),
+      field("Guía (CFG)", h("input", { class: "input", type: "number", step: 0.5, min: 0, max: 20, placeholder: `Auto (${im.models[o.model]?.guidance ?? "por defecto"})`, value: o.guidance, oninput: (e) => (o.guidance = e.target.value) }))) : null,
     field("Formato", segmented(im.aspects.map((a) => [a, a]), o.aspect, (v) => (o.aspect = v))),
     o.provider === "local" ? field("Estilo", select(im.styles.map((s) => [s, STYLE_NAMES[s] || s]), o.style, (v) => (o.style = v))) : null,
     field("Cantidad", slider(o.count, 1, 4, 1, (v) => (o.count = v))),
@@ -67,7 +70,7 @@ function imageTab(body, reload) {
     go_.classList.add("loading");
     try {
       if (o.provider === "google") await runJob(api.post("/api/google/image", { prompt: ta.value, aspect: o.aspect, count: o.count }));
-      else await runJob(api.post("/api/image", { prompt: ta.value, model: o.model, aspect: o.aspect, count: o.count, style: o.style, seed: o.seed === "" ? null : Number(o.seed) }));
+      else await runJob(api.post("/api/image", { prompt: ta.value, model: o.model, aspect: o.aspect, count: o.count, style: o.style, seed: o.seed === "" ? null : Number(o.seed), steps: o.steps === "" ? null : Number(o.steps), guidance: o.guidance === "" ? null : Number(o.guidance) }));
       toast("Imágenes listas", "ok");
       reload();
     } catch (e) {

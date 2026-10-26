@@ -22,6 +22,7 @@ Pensado y dimensionado para: **Intel i5-13420H · NVIDIA RTX 5050 Laptop 8 GB ·
 | **Google** | Ventana de **Google Flow** con tu cuenta (importa automáticamente lo que descargues) + **Imagen 4**, **Gemini Omni Flash** y **Veo** por API. | Gemini API |
 | **Exportación** | Preajustes TikTok / Reels / Shorts / Borrador / Máster 4K o personalizado: 540p–2160p, 24/30/60 fps, H.264 / H.265 / AV1, 4 niveles de calidad, NVENC, SRT y portada JPG, sólo audio MP3. | FFmpeg (NVENC en RTX) |
 | **Modelos** | Descarga con progreso, estado de VRAM, perfil recomendado, fuentes OFL para subtítulos, instalación de extras. | Hugging Face Hub |
+| **Explorar Hugging Face** | Destacados recientes (FLUX.2 [klein] 4B, Z-Image Turbo, Wan 2.2 TI2V 5B) y búsqueda en directo de los modelos en tendencia (imagen, texto→vídeo, imagen→vídeo) con estimación de compatibilidad con tu GPU. Cualquier modelo en formato diffusers se añade con un clic y se usa con un cargador genérico que elige la estrategia de memoria (GPU completa, descarga por componentes o capa a capa). | Hub API + diffusers |
 
 Interfaz oscura minimalista con animaciones en botones (ripple, brillo, resortes), transiciones entre páginas,
 barra de trabajos en segundo plano con cancelación, y una **pantalla de carga animada** (logo que se dibuja,
@@ -98,6 +99,14 @@ Se evaluó y **no fue necesario**: las funciones de edición (cortes, recortes, 
 se implementan directamente con FFmpeg, cuyo filtro `xfade` ya aporta las transiciones típicas de los editores
 comerciales con documentación abierta. Hacer ingeniería inversa de CapCut sería innecesario y sus términos de
 uso lo prohíben. ReelForge vive en su propia carpeta y no modifica el código de REA.
+
+## Mantenerse al día con modelos nuevos
+
+Los modelos integrados no se quedan fijos: en **Modelos → Explorar Hugging Face** la lista se consulta en
+directo (tendencia, más descargados, más gustados o recientes). Al añadir un modelo aparece en *Generar* y en el
+*Reel automático*. Si un modelo muy reciente necesita una versión nueva de diffusers, pulsa
+**Paquetes → Actualizar motores de IA**. Para modelos con licencia que hay que aceptar, añade tu token en
+**Ajustes → Hugging Face**. No todos los modelos caben en 8 GB: la app estima el tamaño y avisa.
 
 ## Licencias de modelos (revisa antes de monetizar)
 

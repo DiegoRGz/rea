@@ -49,6 +49,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": "qwen3:8b",
     "gemini_api_key": "",
+    "hf_token": "",
     "gemini_text_model": "gemini-2.5-flash",
     "google_image_model": "imagen-4.0-generate-001",
     "google_video_model": "gemini-omni-1.1-flash",
@@ -62,7 +63,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "accent": "violet",
 }
 
-SENSITIVE_KEYS = {"gemini_api_key"}
+SENSITIVE_KEYS = {"gemini_api_key", "hf_token"}
 
 _lock = threading.Lock()
 

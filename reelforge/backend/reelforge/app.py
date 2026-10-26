@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import autoreel, captions, catalog, config, ffmpeg, gpu, project, render
-from .ai import google, image, llm, music, stt, tts, video
+from .ai import google, hub, image, llm, music, stt, tts, video
 from .jobs import jobs
 
 TOKEN = os.environ.get("REELFORGE_TOKEN") or secrets.token_urlsafe(18)
@@ -97,8 +97,10 @@ def meta() -> dict:
         "resolutions": list(render.RESOLUTIONS),
         "qualities": {"draft": "Borrador", "standard": "Estándar", "high": "Alta", "max": "Máxima"},
         "tts": tts.catalog(),
-        "image": {"models": image.MODELS, "aspects": list(image.ASPECTS), "styles": list(image.STYLE_PRESETS)},
-        "video": {"models": video.MODELS},
+        "image": {"models": {**image.MODELS, **hub.models("image")}, "aspects": list(image.ASPECTS),
+                  "styles": list(image.STYLE_PRESETS)},
+        "video": {"models": {**video.MODELS, **{k: {**v, "mode": "t2v", "i2v_optional": bool(v.get("i2v"))}
+                                                for k, v in hub.models("video").items()}}},
         "music": {"models": music.MODELS, "license": music.LICENSE},
         "whisper": stt.MODELS,
         "fonts": catalog.fonts_status(),
@@ -393,12 +395,15 @@ class ImageBody(BaseModel):
     seed: Optional[int] = None
     style: str = "none"
     negative: str = ""
+    steps: Optional[int] = None
+    guidance: Optional[float] = None
 
 
 @app.post("/api/image")
 def image_run(b: ImageBody) -> dict:
     return _job("image", f"Imagen: {b.prompt[:40]}", lambda ctx: image.generate(ctx, b.prompt, b.model, b.aspect,
-                                                                                b.count, b.seed, b.style, b.negative))
+                                                                                b.count, b.seed, b.style, b.negative,
+                                                                                b.steps, b.guidance))
 
 
 class VideoBody(BaseModel):
@@ -521,6 +526,51 @@ def fonts_download() -> dict:
 @app.post("/api/extras/install")
 def extras_install(b: IdBody) -> dict:
     return _job("extra", f"Instalando {b.id}", lambda ctx: catalog.install_extra(ctx, b.id), "io")
+
+
+# ------------------------------------------------------- Hugging Face Hub
+
+
+@app.get("/api/hub/search")
+def hub_search(kind: str = "image", sort: str = "trending", q: str = "", limit: int = 30) -> list[dict]:
+    try:
+        return hub.search(kind, sort, q, limit)
+    except Exception as exc:  # noqa: BLE001 - sin conexión, límite de peticiones…
+        raise HTTPException(502, f"No se pudo consultar Hugging Face: {exc}") from exc
+
+
+@app.get("/api/hub/info")
+def hub_info(repo: str) -> dict:
+    try:
+        return hub.info(repo)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"No se pudo leer el modelo: {exc}") from exc
+
+
+@app.get("/api/hub/featured")
+def hub_featured() -> list[dict]:
+    added = {m["repo"] for m in hub.custom_models()}
+    return [{**f, "added": f["repo"] in added} for f in hub.FEATURED]
+
+
+class HubAdd(BaseModel):
+    repo: str
+    kind: str
+    name: Optional[str] = None
+    size_gb: Optional[float] = None
+    i2v: bool = False
+    license: Optional[str] = None
+
+
+@app.post("/api/hub/add")
+def hub_add(b: HubAdd) -> dict:
+    return hub.add_model(b.repo, b.kind, b.name, b.size_gb, b.i2v, b.license)
+
+
+@app.post("/api/hub/remove")
+def hub_remove(b: IdBody) -> dict:
+    gpu.release()
+    return {"removed": hub.remove_model(b.id)}
 
 
 @app.post("/api/gpu/release")

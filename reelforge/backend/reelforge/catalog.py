@@ -13,7 +13,7 @@ from typing import Any, Callable
 import httpx
 
 from . import captions, config, gpu
-from .ai import image, music, video
+from .ai import hub, image, music, video
 from .ffmpeg import CREATE_NO_WINDOW
 from .jobs import JobContext
 
@@ -98,6 +98,12 @@ def entries() -> list[dict[str, Any]]:
         out.append({"id": f"music:{mid}", "group": "Música", "name": cfg["name"], "repos": [cfg["repo"]],
                     "size_gb": cfg["size_gb"], "vram": 2.0, "module": "transformers", "license": "CC-BY-NC-4.0",
                     "desc": "Música instrumental de fondo a partir de texto."})
+    for m in hub.custom_models():
+        group = "Imagen" if m["kind"] == "image" else "Vídeo"
+        out.append({"id": f"hf:{m['repo']}", "group": group, "name": m["name"], "repos": [m["repo"]],
+                    "size_gb": m.get("size_gb") or 0, "vram": min(8.0, m.get("size_gb") or 8.0), "module": "diffusers",
+                    "license": m.get("license") or "ver ficha", "custom": True,
+                    "desc": m.get("note") or "Añadido desde Hugging Face (cargador genérico)."})
     for e in out:
         e["installed"] = gpu.has_module(e["module"])
         e["downloaded"] = all(_repo_ready(r) for r in e["repos"])
@@ -109,8 +115,16 @@ def _loader_for(model_id: str) -> Callable[[], Any]:
         return _kokoro_loader
     if model_id.startswith("whisper:"):
         return _whisper_loader(model_id.split(":", 1)[1])
+    if model_id.startswith("hf:"):
+        repo = model_id[3:]
+        return lambda: hub.download(_NullCtx(), repo)
     kind, mid = model_id.split(":", 1)
     return {"image": _image_loader, "video": _video_loader, "music": _music_loader}[kind](mid)
+
+
+class _NullCtx:
+    def progress(self, *_a, **_k) -> None:
+        pass
 
 
 def download(ctx: JobContext, model_id: str) -> dict:
@@ -175,6 +189,10 @@ def _genai_supports_omni() -> bool:
 
 
 EXTRAS = {
+    "engines": {"name": "Actualizar motores de IA (diffusers, transformers)",
+                "packages": ["-U", "diffusers", "transformers", "accelerate", "huggingface_hub"],
+                "module": "diffusers", "check": lambda: False,
+                "note": "Los modelos nuevos de Hugging Face suelen requerir la última versión de diffusers."},
     "google": {"name": "Google GenAI actualizado (Gemini Omni Flash)", "packages": ["-U", "google-genai>=2.33"],
                "module": "google.genai", "check": _genai_supports_omni,
                "note": "Necesario para generar vídeo con gemini-omni-1.1-flash."},

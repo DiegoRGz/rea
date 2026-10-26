@@ -100,6 +100,10 @@ def generate(ctx: JobContext, prompt: str, model: str = "wan2.1-1.3b", seconds: 
     import torch
     from diffusers.utils import export_to_video, load_image
 
+    if model.startswith("hf:"):
+        from . import hub
+
+        return hub.generate_video(ctx, model, prompt, seconds, image_media_id, steps, seed, landscape)
     if model not in MODELS:
         raise ValueError(f"Modelo desconocido: {model}")
     cfg = MODELS[model]

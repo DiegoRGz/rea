@@ -2,7 +2,7 @@
 import { api, runJob } from "../api.js";
 import { injectFonts } from "../captions.js";
 import { refreshMeta, state } from "../state.js";
-import { bridge, btn, clear, confirmDialog, h, icon, toast } from "../ui.js";
+import { bridge, btn, clear, confirmDialog, h, icon, segmented, toast } from "../ui.js";
 
 export async function render(view) {
   const root = h("div");
@@ -18,6 +18,8 @@ export async function render(view) {
         h("div", { class: "card stat" }, h("span", { class: "muted small" }, "GPU"), h("b", {}, sys.torch.device || sys.gpu?.name || "No detectada"), h("span", { class: "muted small" }, sys.torch.vram_gb ? `${sys.torch.vram_gb} GB VRAM · perfil ${rec.tier}` : sys.torch.torch ? "PyTorch sin CUDA" : "PyTorch no instalado")),
         h("div", { class: "card stat" }, h("span", { class: "muted small" }, "Modelos descargados"), h("b", {}, `${data.models.filter((m) => m.downloaded).length} / ${data.models.length}`), h("span", { class: "muted small" }, `~${totalGb.toFixed(1)} GB en disco`)),
         h("div", { class: "card stat" }, h("span", { class: "muted small" }, "IA de texto"), h("b", {}, data.llm.provider === "ollama" ? (data.llm.ollama.running ? `Ollama · ${data.llm.model}` : "Ollama no iniciado") : data.llm.provider === "gemini" ? "Gemini" : "Plantillas"), h("span", { class: "muted small" }, data.llm.ollama.running ? `${data.llm.ollama.models.length} modelos locales` : "Opcional: guiones con IA"))),
+      h("div", { class: "section-title" }, "Explorar Hugging Face · lo más nuevo"),
+      hubExplorer(draw),
       h("div", { class: "section-title" }, "Paquetes"),
       h("div", { class: "grid g2" }, data.extras.map((x) => extraCard(x, draw))),
       ...Object.entries(groups).flatMap(([group, models]) => [h("div", { class: "section-title" }, group), h("div", { class: "grid g3 stagger" }, models.map((m) => modelCard(m, rec, draw)))]),
@@ -48,11 +50,99 @@ function modelCard(m, rec, reload) {
   return h("div", { class: "card model-card" },
     h("div", { class: "mc-head" }, h("div", { style: { flex: 1 } }, h("h3", {}, m.name), h("div", { class: "muted small", style: { marginTop: "4px" } }, m.desc)), recommended ? h("span", { class: "badge accent" }, "Recomendado") : null),
     h("div", { class: "row wrap" }, h("span", { class: "badge" }, `${m.size_gb} GB`), h("span", { class: `badge ${m.vram <= (state.system?.torch?.vram_gb || 8) ? "ok" : "warn"}` }, `VRAM ~${m.vram} GB`), h("span", { class: "badge" }, m.license), !m.installed ? h("span", { class: "badge warn" }, "falta paquete") : null),
-    h("div", { class: "row" }, dl));
+    h("div", { class: "row" }, dl, m.custom ? btn("Quitar", { icon: "trash", cls: "sm ghost danger", onClick: async () => {
+      if (!(await confirmDialog("Quitar modelo", `¿Quitar ${m.name} de la app? Los archivos descargados se conservan en la caché.`, "Quitar", true))) return;
+      await api.post("/api/hub/remove", { id: m.id.slice(3) });
+      await refreshMeta();
+      reload();
+    } }) : null));
+}
+
+const KIND_LABEL = { image: "Imagen", video: "Texto → vídeo", i2v: "Imagen → vídeo" };
+const fmtNum = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)} k` : String(n || 0));
+
+/** Destacados recientes + búsqueda en vivo de los modelos en tendencia del Hub. */
+function hubExplorer(reloadPage) {
+  const st = { kind: "image", sort: "trending", q: "" };
+  const featured = h("div", { class: "grid g3" });
+  const results = h("div", { class: "col" });
+  const search = h("input", { class: "input", placeholder: "Buscar modelo (p. ej. flux, wan, hunyuan, ltx)…", style: { maxWidth: "340px" } });
+  let timer;
+  search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { st.q = search.value.trim(); load(); }, 450); });
+
+  const add = async (button, repo, kind, extra = {}) => {
+    button.classList.add("loading");
+    try {
+      await api.post("/api/hub/add", { repo, kind: kind === "image" ? "image" : "video", i2v: kind === "i2v", ...extra });
+      await refreshMeta();
+      toast(`${repo} añadido. Descárgalo abajo o úsalo directamente en Generar.`, "ok", 6000);
+      reloadPage();
+    } catch (e) {
+      toast(e.message, "err");
+      button.classList.remove("loading");
+    }
+  };
+
+  api.get("/api/hub/featured").then((items) => clear(featured, items.map((f) => {
+    const b = btn(f.added ? "Añadido" : "Añadir", { icon: f.added ? "check" : "plus", cls: f.added ? "sm" : "sm primary" });
+    if (f.added) b.disabled = true;
+    b.onclick = () => add(b, f.repo, f.kind === "video" ? (f.i2v ? "i2v" : "video") : "image", { name: f.name, size_gb: f.size_gb, license: f.license });
+    return h("div", { class: "card model-card" },
+      h("div", { class: "mc-head" }, h("div", { style: { flex: 1 } }, h("h3", {}, f.name), h("div", { class: "muted small", style: { marginTop: "4px" } }, f.note)), h("span", { class: "badge accent" }, "Nuevo")),
+      h("div", { class: "row wrap" }, h("span", { class: "badge" }, f.kind === "image" ? "Imagen" : "Vídeo"), h("span", { class: "badge" }, `~${f.size_gb} GB`), h("span", { class: "badge" }, f.license)),
+      h("div", { class: "row" }, b, btn("Ficha", { icon: "external", cls: "sm ghost", onClick: () => bridge.openExternal(`https://huggingface.co/${f.repo}`) })));
+  })));
+
+  const row = (m) => {
+    const info = h("span", { class: "muted small" });
+    const check = btn("Compatibilidad", { icon: "cpu", cls: "sm ghost" });
+    const addBtn = btn(m.added ? "Añadido" : "Añadir", { icon: m.added ? "check" : "plus", cls: m.added ? "sm" : "sm primary" });
+    if (m.added) addBtn.disabled = true;
+    let details = null;
+    check.onclick = async () => {
+      check.classList.add("loading");
+      try {
+        details = await api.get(`/api/hub/info?repo=${encodeURIComponent(m.repo)}`);
+        const cls = { ok: "ok", slow: "warn", no: "err" }[details.compat.level] || "";
+        clear(info, h("span", { class: `badge ${cls}` }, details.compat.label), ` · pesos ~${details.size_gb} GB`, details.gated ? " · requiere aceptar la licencia y token de HF" : "", details.diffusers ? "" : " · no está en formato diffusers");
+      } catch (e) {
+        toast(e.message, "err");
+      } finally {
+        check.classList.remove("loading");
+      }
+    };
+    addBtn.onclick = () => add(addBtn, m.repo, st.kind, details ? { size_gb: details.size_gb, license: details.license } : { license: m.license });
+    return h("div", { class: "card row", style: { padding: "12px 14px" } },
+      icon(st.kind === "image" ? "image" : "video", 18),
+      h("div", { style: { flex: 1, minWidth: 0 } },
+        h("div", { class: "row", style: { gap: "8px" } }, h("b", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, m.repo), m.featured ? h("span", { class: "badge accent" }, "Destacado") : null),
+        h("div", { class: "row wrap small muted", style: { gap: "10px", marginTop: "3px" } }, `♥ ${fmtNum(m.likes)}`, `↓ ${fmtNum(m.downloads)}`, m.created ? `publicado ${m.created.slice(0, 10)}` : "", m.license ? `licencia ${m.license}` : "", info)),
+      check, addBtn, btn("", { icon: "external", cls: "ghost icon sm", title: "Abrir ficha", onClick: () => bridge.openExternal(`https://huggingface.co/${m.repo}`) }));
+  };
+
+  const load = async () => {
+    clear(results, h("div", { class: "row muted small" }, h("div", { class: "spinner" }), "Consultando Hugging Face…"));
+    try {
+      const items = await api.get(`/api/hub/search?kind=${st.kind}&sort=${st.sort}&q=${encodeURIComponent(st.q)}&limit=20`);
+      clear(results, items.length ? items.map(row) : h("div", { class: "empty" }, "Sin resultados."));
+    } catch (e) {
+      clear(results, h("div", { class: "notice" }, icon("alert", 16), e.message));
+    }
+  };
+  load();
+  return h("div", { class: "col", style: { gap: "14px" } },
+    featured,
+    h("div", { class: "row wrap" },
+      segmented(Object.entries(KIND_LABEL), st.kind, (v) => { st.kind = v; load(); }),
+      segmented([["trending", "Tendencia"], ["downloads", "Más descargados"], ["likes", "Más gustados"], ["recent", "Recientes"]], st.sort, (v) => { st.sort = v; load(); }),
+      search),
+    h("div", { class: "notice info" }, icon("info", 16), h("div", {}, "La lista se consulta en directo en Hugging Face, así que siempre verás los modelos más nuevos. Cualquier modelo en formato diffusers funciona con el cargador genérico; los que no caben en 8 GB se ejecutan descargando partes a la RAM (más lento). Si un modelo muy nuevo falla, pulsa «Actualizar motores de IA» en Paquetes.")),
+    results);
 }
 
 function extraCard(x, reload) {
-  const b = btn(x.installed ? "Instalado" : "Instalar", { icon: x.installed ? "check" : "download", cls: x.installed ? "sm" : "sm primary" });
+  const upgrade = x.id === "engines";
+  const b = btn(upgrade ? "Actualizar" : x.installed ? "Instalado" : "Instalar", { icon: x.installed ? "check" : upgrade ? "refresh" : "download", cls: x.installed ? "sm" : "sm primary" });
   if (x.installed) b.disabled = true;
   b.onclick = async () => {
     if (!(await confirmDialog(`Instalar ${x.name}`, `Se ejecutará pip en el entorno de ReelForge. ${x.note}`, "Instalar"))) return;
