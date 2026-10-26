@@ -22,14 +22,9 @@ API = "https://huggingface.co/api"
 TASKS = {"image": "text-to-image", "video": "text-to-video", "i2v": "image-to-video"}
 SORTS = {"trending": "trendingScore", "downloads": "downloads", "likes": "likes", "recent": "createdAt"}
 
-# Modelos recientes destacados (se cargan con el cargador genérico).
+# Modelos recientes destacados (se cargan con el cargador genérico). Los de imagen
+# recomendados (FLUX.2 [klein], Z-Image Turbo) ya vienen integrados en image.MODELS.
 FEATURED: list[dict[str, Any]] = [
-    {"repo": "black-forest-labs/FLUX.2-klein-4B", "kind": "image", "name": "FLUX.2 [klein] 4B",
-     "steps": 4, "guidance": 1.0, "license": "Apache-2.0", "size_gb": 16.0,
-     "note": "Calidad muy alta en 4 pasos. En 8 GB se ejecuta con descarga a RAM."},
-    {"repo": "Tongyi-MAI/Z-Image-Turbo", "kind": "image", "name": "Z-Image Turbo",
-     "steps": 9, "guidance": 0.0, "license": "Apache-2.0", "size_gb": 20.0,
-     "note": "Fotorrealismo y texto legible en la imagen. Con descarga a RAM en 8 GB."},
     {"repo": "Wan-AI/Wan2.2-TI2V-5B-Diffusers", "kind": "video", "name": "Wan 2.2 TI2V 5B",
      "steps": 30, "guidance": 5.0, "license": "Apache-2.0", "size_gb": 32.0, "fps": 24, "i2v": True,
      "note": "Texto o imagen → vídeo 720p. Muy lento en 8 GB."},
@@ -50,12 +45,20 @@ def _headers() -> dict[str, str]:
 # ----------------------------------------------------------- registro local
 
 
+def _builtin_repos() -> set[str]:
+    from . import image, video
+
+    return {m["repo"] for m in (*image.MODELS.values(), *video.MODELS.values())}
+
+
 def custom_models() -> list[dict[str, Any]]:
+    """Modelos añadidos desde el explorador (sin duplicar los que ya vienen integrados)."""
     try:
         data = json.loads(_custom_file().read_text("utf-8"))
-        return [m for m in data if isinstance(m, dict) and m.get("repo")]
     except (OSError, json.JSONDecodeError):
         return []
+    builtin = _builtin_repos()
+    return [m for m in data if isinstance(m, dict) and m.get("repo") and m["repo"] not in builtin]
 
 
 def _save_custom(items: list[dict[str, Any]]) -> None:
@@ -70,6 +73,8 @@ def add_model(repo: str, kind: str, name: str | None = None, size_gb: float | No
               i2v: bool = False, license_: str | None = None) -> dict[str, Any]:
     if kind not in ("image", "video"):
         raise ValueError("Tipo no válido")
+    if repo in _builtin_repos():
+        raise ValueError("Este modelo ya viene integrado en la app (Modelos → Imagen/Vídeo).")
     featured = next((f for f in FEATURED if f["repo"] == repo), {})
     entry = {**featured, "repo": repo, "kind": kind, "name": name or featured.get("name") or repo.split("/")[-1],
              "size_gb": size_gb or featured.get("size_gb"), "i2v": i2v or featured.get("i2v", False),
@@ -117,7 +122,7 @@ def search(kind: str = "image", sort: str = "trending", query: str = "", limit: 
         params["search"] = query
     r = httpx.get(f"{API}/models", params=params, headers=_headers(), timeout=20)
     r.raise_for_status()
-    added = {m["repo"] for m in custom_models()}
+    added = {m["repo"] for m in custom_models()} | _builtin_repos()
     out = []
     for m in r.json():
         tags = m.get("tags") or []
@@ -197,35 +202,94 @@ def _component_gb(module) -> float:
         return 0.0
 
 
-def _load(repo: str):
+QUANT_CANDIDATES = ("transformer", "unet", "text_encoder", "text_encoder_2", "text_encoder_3")
+
+
+def bnb_available() -> bool:
+    if not gpu.has_module("bitsandbytes"):
+        return False
+    try:
+        import importlib
+
+        importlib.import_module("bitsandbytes")
+        return True
+    except Exception:  # noqa: BLE001 - binarios incompatibles con esta GPU/SO
+        return False
+
+
+def _quant_components(repo: str, token: str | None) -> list[str]:
+    """Componentes grandes del pipeline que conviene comprimir a 4 bits."""
+    from huggingface_hub import hf_hub_download
+
+    index = json.loads(Path(hf_hub_download(repo, "model_index.json", token=token)).read_text("utf-8"))
+    return [c for c in QUANT_CANDIDATES if isinstance(index.get(c), list) and index[c][0] not in (None, "null")]
+
+
+def load_pipeline(repo: str, size_gb: float | None = None, quantize: str = "auto"):
+    """Carga cualquier pipeline diffusers con el mejor plan de memoria para la GPU.
+
+    quantize="auto": si los pesos no caben en la VRAM y bitsandbytes está disponible,
+    el transformer/UNet y los codificadores de texto se cargan en NF4 (4 bits): ocupan ~4×
+    menos y la calidad apenas cambia. Si no, se recurre a descarga a RAM."""
     import torch
     from diffusers import DiffusionPipeline
 
-    dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+    cuda = gpu.device() == "cuda"
+    dtype = torch.bfloat16 if cuda and torch.cuda.is_bf16_supported() else torch.float16
     token = config.load_settings().get("hf_token") or None
-    pipe = DiffusionPipeline.from_pretrained(repo, torch_dtype=dtype, token=token)
-    for name in ("vae",):
-        vae = getattr(pipe, name, None)
-        for fn in ("enable_tiling", "enable_slicing"):
-            if vae is not None and hasattr(vae, fn):
-                try:
-                    getattr(vae, fn)()
-                except Exception:  # noqa: BLE001
-                    pass
-    if gpu.device() != "cuda":
+    vram = gpu.torch_info().get("vram_gb") or 8.0
+    kwargs: dict[str, Any] = {"torch_dtype": dtype, "token": token}
+    quantized = False
+    if cuda and quantize != "never" and (quantize == "always" or (size_gb or 0) > vram * 0.75) and bnb_available():
+        try:
+            from diffusers.quantizers import PipelineQuantizationConfig
+
+            comps = _quant_components(repo, token)
+            if comps:
+                kwargs["quantization_config"] = PipelineQuantizationConfig(
+                    quant_backend="bitsandbytes_4bit",
+                    quant_kwargs={"load_in_4bit": True, "bnb_4bit_quant_type": "nf4",
+                                  "bnb_4bit_compute_dtype": dtype},
+                    components_to_quantize=comps,
+                )
+                quantized = True
+        except Exception:  # noqa: BLE001 - diffusers antiguo: sin cuantización
+            quantized = False
+    pipe = DiffusionPipeline.from_pretrained(repo, **kwargs)
+    vae = getattr(pipe, "vae", None)
+    for fn in ("enable_tiling", "enable_slicing"):
+        if vae is not None and hasattr(vae, fn):
+            try:
+                getattr(vae, fn)()
+            except Exception:  # noqa: BLE001
+                pass
+    if not cuda:
         return pipe
     modules = [m for m in pipe.components.values() if isinstance(m, torch.nn.Module)]
     total = sum(_component_gb(m) for m in modules)
     largest = max((_component_gb(m) for m in modules), default=0)
     free = gpu.torch_info().get("vram_free_gb") or 6.0
     # Plan de memoria: todo en GPU → por componentes → capa a capa.
-    if total < free * 0.85 and not config.load_settings().get("low_vram", True):
-        pipe.to("cuda")
-    elif largest < free * 0.8:
+    if total < free * 0.85:
+        try:
+            pipe.to("cuda")
+            pipe._reelforge_plan = "gpu"
+            return pipe
+        except torch.cuda.OutOfMemoryError:
+            pipe.to("cpu")
+            torch.cuda.empty_cache()
+    if largest < free * 0.8 or quantized:
         pipe.enable_model_cpu_offload()
+        pipe._reelforge_plan = "offload"
     else:
         pipe.enable_sequential_cpu_offload()
+        pipe._reelforge_plan = "sequential"
     return pipe
+
+
+def _load(repo: str):
+    m = next((x for x in custom_models() if x["repo"] == repo), {})
+    return load_pipeline(repo, m.get("size_gb"))
 
 
 def _call_kwargs(pipe, *, prompt: str, negative: str, width: int, height: int, steps: int | None,

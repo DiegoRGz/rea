@@ -42,7 +42,7 @@ class AutoReelRequest(BaseModel):
     speed: float = 1.05
     lang: str = "es"
     visual_mode: str = "image"  # image | video | google-image | google-video | library
-    image_model: str = "sdxl-lightning"
+    image_model: str = "flux2-klein"
     image_style: str = "cinematic"
     video_model: str = "wan2.1-1.3b"
     caption_style: str = "viral"

@@ -56,7 +56,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "tts_engine": "kokoro",
     "tts_voice": "ef_dora",
     "whisper_model": "large-v3-turbo",
-    "image_model": "sdxl-lightning",
+    "image_model": "flux2-klein",
     "video_model": "wan2.1-1.3b",
     "export_preset": "tiktok",
     "caption_style": "viral",
@@ -73,6 +73,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "brand_intro_media_id": "",
     "brand_outro_media_id": "",
     "auto_edit_defaults": True,
+    "settings_version": 2,
 }
 
 SENSITIVE_KEYS = {"gemini_api_key", "hf_token"}
@@ -102,6 +103,9 @@ def load_settings() -> dict[str, Any]:
                 stored = json.loads(SETTINGS_FILE.read_text("utf-8"))
                 if isinstance(stored, dict):
                     data.update({k: v for k, v in stored.items() if k in DEFAULT_SETTINGS})
+                    if stored.get("settings_version", 1) < 2 and stored.get("image_model") == "sdxl-lightning":
+                        # v2: el modelo de imagen por defecto pasa de SDXL Lightning a FLUX.2 [klein]
+                        data["image_model"] = "flux2-klein"
             except (OSError, json.JSONDecodeError):
                 pass
         return data

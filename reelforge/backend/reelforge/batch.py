@@ -27,7 +27,7 @@ class BatchRequest(BaseModel):
     voice: str = "ef_dora"
     speed: float = 1.08
     visual_mode: str = "image"
-    image_model: str = "sdxl-lightning"
+    image_model: str = "flux2-klein"
     image_style: str = "cinematic"
     caption_style: Optional[str] = None
     transition: Optional[str] = None

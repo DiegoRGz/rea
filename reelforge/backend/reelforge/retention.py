@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
-from . import analysis, assets, gpu
+from . import analysis, assets, config, gpu
 from .ai import llm, stt
 from .jobs import JobContext
 from .project import (AudioItem, BRoll, Clip, Effect, Project, Word, clip_lengths, effective_transitions,
@@ -345,7 +345,7 @@ def apply_broll(ctx: JobContext, project: Project, opts: AutoEditOptions) -> int
         except Exception:  # noqa: BLE001
             prompts = []
         prompts = (prompts + [f"{t}, cinematic vertical photo, dramatic lighting" for t in texts])[: len(texts)]
-        model = opts.image_model or "sdxl-lightning"
+        model = opts.image_model or config.load_settings().get("image_model") or "flux2-klein"
         for i, prompt in enumerate(prompts):
             ctx.progress(None, f"Generando B-roll {i + 1}/{len(prompts)}")
             media_ids.append(image.generate(ctx, prompt, model, "9:16", 1, None, "cinematic")[0]["id"])

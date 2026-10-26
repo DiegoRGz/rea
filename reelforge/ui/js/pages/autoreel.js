@@ -25,7 +25,7 @@ const draft = (window.__rfDraft ||= {
   voice: null,
   speed: 1.05,
   visual_mode: "image",
-  image_model: "sdxl-lightning",
+  image_model: null,
   image_style: "cinematic",
   video_model: "wan2.1-1.3b",
   caption_style: null,
@@ -39,6 +39,7 @@ const draft = (window.__rfDraft ||= {
 export async function render(view) {
   const s = state.settings;
   draft.tts_engine ||= s.tts_engine;
+  draft.image_model ||= s.image_model;
   draft.voice ||= s.tts_voice;
   draft.caption_style ||= s.caption_style;
   const stepper = h("div", { class: "stepper" });

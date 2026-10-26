@@ -453,7 +453,7 @@ def transcribe(b: TranscribeBody) -> dict:
 
 class ImageBody(BaseModel):
     prompt: str
-    model: str = "sdxl-lightning"
+    model: str = "flux2-klein"
     aspect: str = "9:16"
     count: int = 1
     seed: Optional[int] = None
@@ -572,7 +572,7 @@ def autoreel_run(b: autoreel.AutoReelRequest) -> dict:
 @app.get("/api/models")
 def models() -> dict:
     return {"models": catalog.entries(), "fonts": catalog.fonts_status(), "extras": catalog.extras_status(),
-            "llm": llm_status()}
+            "llm": llm_status(), "cache": catalog.cache_usage()}
 
 
 class IdBody(BaseModel):
@@ -582,6 +582,24 @@ class IdBody(BaseModel):
 @app.post("/api/models/download")
 def model_download(b: IdBody) -> dict:
     return _job("download", f"Descargando {b.id}", lambda ctx: catalog.download(ctx, b.id), "io")
+
+
+@app.post("/api/models/delete")
+def model_delete(b: IdBody) -> dict:
+    try:
+        return catalog.delete_model(b.id)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/cache")
+def cache_info() -> dict:
+    return catalog.cache_usage()
+
+
+@app.post("/api/cache/clear")
+def cache_clear() -> dict:
+    return catalog.clear_cache()
 
 
 @app.post("/api/fonts/download")
@@ -630,7 +648,10 @@ class HubAdd(BaseModel):
 
 @app.post("/api/hub/add")
 def hub_add(b: HubAdd) -> dict:
-    return hub.add_model(b.repo, b.kind, b.name, b.size_gb, b.i2v, b.license)
+    try:
+        return hub.add_model(b.repo, b.kind, b.name, b.size_gb, b.i2v, b.license)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/hub/remove")

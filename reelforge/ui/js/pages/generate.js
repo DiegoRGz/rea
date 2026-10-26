@@ -49,7 +49,7 @@ function promptBox(placeholder) {
 
 function imageTab(body, reload) {
   const im = state.meta.image;
-  const o = { provider: "local", model: state.settings.image_model in im.models ? state.settings.image_model : "sdxl-lightning", aspect: "9:16", count: 2, style: "cinematic", seed: "", steps: "", guidance: "" };
+  const o = { provider: "local", model: state.settings.image_model in im.models ? state.settings.image_model : "flux2-klein", aspect: "9:16", count: 2, style: "cinematic", seed: "", steps: "", guidance: "" };
   const { ta, improve } = promptBox("Un astronauta caminando por un mercado nocturno de Tokio, lluvia, luces de neón…");
   const opts = h("div", { class: "col", style: { gap: "14px" } });
   const drawOpts = () => clear(opts,

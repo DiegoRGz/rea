@@ -2,7 +2,7 @@
 import { api, runJob } from "../api.js";
 import { injectFonts } from "../captions.js";
 import { refreshMeta, state } from "../state.js";
-import { bridge, btn, clear, confirmDialog, h, icon, segmented, toast } from "../ui.js";
+import { bridge, btn, clear, confirmDialog, fmtBytes, h, icon, segmented, toast } from "../ui.js";
 
 export async function render(view) {
   const root = h("div");
@@ -12,11 +12,18 @@ export async function render(view) {
     const rec = sys.recommend;
     const groups = {};
     for (const m of data.models) (groups[m.group] ||= []).push(m);
-    const totalGb = data.models.filter((m) => m.downloaded).reduce((a, m) => a + m.size_gb, 0);
+    const totalGb = data.models.reduce((a, m) => a + (m.disk_gb || 0), 0);
+    const cacheGb = Object.values(data.cache || {}).reduce((a, v) => a + v, 0);
     clear(root,
       h("div", { class: "grid g3 stagger" },
         h("div", { class: "card stat" }, h("span", { class: "muted small" }, "GPU"), h("b", {}, sys.torch.device || sys.gpu?.name || "No detectada"), h("span", { class: "muted small" }, sys.torch.vram_gb ? `${sys.torch.vram_gb} GB VRAM · perfil ${rec.tier}` : sys.torch.torch ? "PyTorch sin CUDA" : "PyTorch no instalado")),
-        h("div", { class: "card stat" }, h("span", { class: "muted small" }, "Modelos descargados"), h("b", {}, `${data.models.filter((m) => m.downloaded).length} / ${data.models.length}`), h("span", { class: "muted small" }, `~${totalGb.toFixed(1)} GB en disco`)),
+        h("div", { class: "card stat" }, h("span", { class: "muted small" }, "Modelos descargados"), h("b", {}, `${data.models.filter((m) => m.downloaded).length} / ${data.models.length}`), h("span", { class: "muted small" }, `${totalGb.toFixed(1)} GB en disco · caché de renders ${cacheGb.toFixed(1)} GB`),
+          cacheGb > 0.01 ? btn("Limpiar caché de renders", { icon: "trash", cls: "sm ghost", onClick: async () => {
+            if (!(await confirmDialog("Limpiar caché", `Se borrarán ${cacheGb.toFixed(2)} GB de clips preprocesados y vistas previas. Se regeneran solos al exportar; tus proyectos, medios y exportaciones no se tocan.`, "Limpiar"))) return;
+            const r = await api.post("/api/cache/clear");
+            toast(`Liberados ${r.freed_gb} GB`, "ok");
+            draw();
+          } }) : null),
         h("div", { class: "card stat" }, h("span", { class: "muted small" }, "IA de texto"), h("b", {}, data.llm.provider === "ollama" ? (data.llm.ollama.running ? `Ollama · ${data.llm.model}` : "Ollama no iniciado") : data.llm.provider === "gemini" ? "Gemini" : "Plantillas"), h("span", { class: "muted small" }, data.llm.ollama.running ? `${data.llm.ollama.models.length} modelos locales` : "Opcional: guiones con IA"))),
       h("div", { class: "section-title" }, "Explorar Hugging Face · lo más nuevo"),
       hubExplorer(draw),
@@ -34,7 +41,7 @@ export async function render(view) {
 
 function modelCard(m, rec, reload) {
   const recommended = [rec.image && `image:${rec.image}`, `whisper:${rec.whisper}`, rec.video && `video:${rec.video}`, "kokoro"].includes(m.id);
-  const dl = btn(m.downloaded ? "Descargado" : "Descargar", { icon: m.downloaded ? "check" : "download", cls: m.downloaded ? "sm" : "sm primary" });
+  const dl = btn(m.downloaded ? "Descargado" : m.partial ? "Completar descarga" : "Descargar", { icon: m.downloaded ? "check" : "download", cls: m.downloaded ? "sm" : "sm primary" });
   if (m.downloaded || !m.installed) dl.disabled = true;
   dl.onclick = async () => {
     dl.classList.add("loading");
@@ -50,7 +57,21 @@ function modelCard(m, rec, reload) {
   return h("div", { class: "card model-card" },
     h("div", { class: "mc-head" }, h("div", { style: { flex: 1 } }, h("h3", {}, m.name), h("div", { class: "muted small", style: { marginTop: "4px" } }, m.desc)), recommended ? h("span", { class: "badge accent" }, "Recomendado") : null),
     h("div", { class: "row wrap" }, h("span", { class: "badge" }, `${m.size_gb} GB`), h("span", { class: `badge ${m.vram <= (state.system?.torch?.vram_gb || 8) ? "ok" : "warn"}` }, `VRAM ~${m.vram} GB`), h("span", { class: "badge" }, m.license), !m.installed ? h("span", { class: "badge warn" }, "falta paquete") : null),
-    h("div", { class: "row" }, dl, m.custom ? btn("Quitar", { icon: "trash", cls: "sm ghost danger", onClick: async () => {
+    h("div", { class: "row" }, dl,
+      m.disk_gb > 0 ? btn(`Eliminar (${fmtBytes(m.disk_gb * 1024 ** 3)})`, { icon: "trash", cls: "sm ghost danger", title: "Borra los archivos descargados de este modelo", onClick: async (e) => {
+        const b = e.currentTarget; // capturado antes del await: currentTarget se anula al terminar el evento
+        if (!(await confirmDialog("Eliminar modelo", `¿Borrar ${m.name} del disco (${fmtBytes(m.disk_gb * 1024 ** 3)})? Podrás volver a descargarlo cuando quieras.`, "Eliminar", true))) return;
+        b.classList.add("loading");
+        try {
+          const r = await api.post("/api/models/delete", { id: m.id });
+          toast(`${m.name}: liberados ${fmtBytes(r.freed_gb * 1024 ** 3)}${r.kept_shared.length ? " (se conservan archivos compartidos con otro modelo)" : ""}`, "ok", 6000);
+          reload();
+        } catch (err) {
+          toast(err.message, "err", 8000);
+          b.classList.remove("loading");
+        }
+      } }) : null,
+      m.custom ? btn("Quitar de la lista", { icon: "x", cls: "sm ghost", onClick: async () => {
       if (!(await confirmDialog("Quitar modelo", `¿Quitar ${m.name} de la app? Los archivos descargados se conservan en la caché.`, "Quitar", true))) return;
       await api.post("/api/hub/remove", { id: m.id.slice(3) });
       await refreshMeta();

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -61,6 +63,9 @@ def _kokoro_loader():
 
 
 def _image_loader(mid: str):
+    cfg = image.MODELS[mid]
+    if cfg.get("generic"):
+        return lambda: hub.download(_NullCtx(), cfg["repo"])  # sólo descarga, sin cargar 16 GB en RAM
     return lambda: image._load(mid)
 
 
@@ -85,10 +90,13 @@ def entries() -> list[dict[str, Any]]:
          "license": "MIT", "desc": "Ligero, ideal si la GPU está ocupada."},
     ]
     for mid, cfg in image.MODELS.items():
-        repos = [cfg["repo"], "madebyollin/sdxl-vae-fp16-fix"] + (["ByteDance/SDXL-Lightning"] if mid == "sdxl-lightning" else [])
+        repos = [cfg["repo"]]
+        if not cfg.get("generic"):
+            repos += ["madebyollin/sdxl-vae-fp16-fix"] + (["ByteDance/SDXL-Lightning"] if mid == "sdxl-lightning" else [])
         out.append({"id": f"image:{mid}", "group": "Imagen", "name": cfg["name"], "repos": repos,
                     "size_gb": cfg["size_gb"], "vram": cfg["vram"], "module": "diffusers",
-                    "license": "OpenRAIL++ / SAI", "desc": "Imágenes 9:16 en segundos."})
+                    "license": cfg.get("license", "OpenRAIL++ / SAI"),
+                    "desc": cfg.get("desc", "Modelo ligero de 2023: rápido pero con más errores en manos y caras.")})
     for mid, cfg in video.MODELS.items():
         out.append({"id": f"video:{mid}", "group": "Vídeo", "name": cfg["name"], "repos": [cfg["repo"]],
                     "size_gb": cfg["size_gb"], "vram": cfg["vram"], "module": "diffusers",
@@ -107,7 +115,63 @@ def entries() -> list[dict[str, Any]]:
     for e in out:
         e["installed"] = gpu.has_module(e["module"])
         e["downloaded"] = all(_repo_ready(r) for r in e["repos"])
+        e["partial"] = not e["downloaded"] and any(_repo_dir(r).is_dir() for r in e["repos"])
+        e["disk_gb"] = round(sum(_dir_size(_repo_dir(r)) for r in e["repos"]) / 1024**3, 4)
     return out
+
+
+def _rmtree(path: Path) -> None:
+    def onerror(func, p, _exc):  # Windows: archivos de sólo lectura en la caché de HF
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except OSError:
+            pass
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=onerror)
+    else:
+        shutil.rmtree(path, onerror=onerror)
+
+
+def delete_model(model_id: str) -> dict[str, Any]:
+    """Borra del disco los pesos de un modelo (sin tocar repos que usa otro modelo descargado)."""
+    all_entries = entries()
+    entry = next((e for e in all_entries if e["id"] == model_id), None)
+    if not entry:
+        raise ValueError("Modelo desconocido")
+    gpu.release()
+    shared = {r for e in all_entries if e["id"] != model_id and e["downloaded"] for r in e["repos"]}
+    freed, kept = 0, []
+    for repo in entry["repos"]:
+        if repo in shared:
+            kept.append(repo)
+            continue
+        folder = _repo_dir(repo)
+        if folder.is_dir():
+            freed += _dir_size(folder)
+            _rmtree(folder)
+            if folder.exists():
+                raise RuntimeError(f"No se pudo borrar {folder} (¿está en uso? Cierra otras generaciones e inténtalo de nuevo)")
+    return {"id": model_id, "freed_gb": round(freed / 1024**3, 4), "kept_shared": kept}
+
+
+CACHE_FOLDERS = ("segments", "previews", "render", "gen", "uploads")
+
+
+def cache_usage() -> dict[str, float]:
+    return {name: round(_dir_size(config.CACHE_DIR / name) / 1024**3, 2) for name in CACHE_FOLDERS}
+
+
+def clear_cache() -> dict[str, Any]:
+    """Borra cachés regenerables (clips preprocesados, vistas previas, temporales)."""
+    freed = 0
+    for name in CACHE_FOLDERS:
+        folder = config.CACHE_DIR / name
+        if folder.is_dir():
+            freed += _dir_size(folder)
+            _rmtree(folder)
+    return {"freed_gb": round(freed / 1024**3, 2)}
 
 
 def _loader_for(model_id: str) -> Callable[[], Any]:
@@ -199,8 +263,9 @@ EXTRAS = {
     "xtts": {"name": "Clonación de voz XTTS-v2", "packages": ["coqui-tts>=0.24"], "module": "TTS",
              "note": "Licencia CPML (no comercial). ~2 GB adicionales al primer uso."},
     "ai": {"name": "Paquete de IA local completo", "packages": ["-r", str(config.BACKEND_DIR / "requirements-ai.txt")],
-           "module": "diffusers", "check": lambda: gpu.has_module("diffusers") and gpu.has_module("cv2"),
-           "note": "diffusers, transformers, faster-whisper, kokoro, OpenCV (seguimiento facial de Clips)…"},
+           "module": "diffusers",
+           "check": lambda: all(gpu.has_module(m) for m in ("diffusers", "cv2", "bitsandbytes")),
+           "note": "diffusers, transformers, faster-whisper, kokoro, OpenCV (Clips) y bitsandbytes (modelos en 4 bits)…"},
 }
 
 

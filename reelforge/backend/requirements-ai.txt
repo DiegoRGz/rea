@@ -12,3 +12,4 @@ faster-whisper>=1.1
 kokoro>=0.9.4
 misaki[en]>=0.9.4
 opencv-python-headless>=4.9,<5
+bitsandbytes>=0.45

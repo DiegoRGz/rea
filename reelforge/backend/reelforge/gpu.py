@@ -181,7 +181,7 @@ def recommendations() -> dict[str, Any]:
         "tier": tier,
         "vram_gb": vram,
         "whisper": "large-v3-turbo" if vram >= 4 else "small",
-        "image": "sdxl-lightning" if vram >= 6 else "sdxl-turbo",
+        "image": "flux2-klein" if vram >= 6 else "sdxl-lightning",
         "video": "wan2.1-1.3b" if vram >= 6 else None,
         "llm": "qwen3:8b" if vram >= 7 else "qwen3:4b",
         "notes": [

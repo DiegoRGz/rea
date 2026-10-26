@@ -18,10 +18,10 @@ Pensado y dimensionado para: **Intel i5-13420H · NVIDIA RTX 5050 Laptop 8 GB ·
 | **Voz IA / narración** | Voces naturales en español y otros idiomas, velocidad/tono, clonación de voz opcional. | Kokoro-82M (local), Edge TTS (en línea, gratis), XTTS-v2 (opcional) |
 | **Transcripción** | Tiempos por palabra, exportación SRT/VTT/TXT, subtítulos automáticos para tus propios vídeos. | faster-whisper large-v3-turbo (GPU con respaldo a CPU) |
 | **Subtítulos virales** | 7 estilos animados palabra a palabra: Viral (Hormozi), Beast, Resaltado, Karaoke, Una palabra, Neón, Minimalista. Posición, tamaño, mayúsculas, edición del texto. | ASS + libass |
-| **Generar** | Imágenes 9:16 en segundos, vídeo de texto o de imagen, música de fondo. | SDXL Lightning/Turbo, Wan 2.1 1.3B, LTX-Video, MusicGen |
+| **Generar** | Imágenes 9:16, vídeo de texto o de imagen, música de fondo. | FLUX.2 [klein] 4B y Z-Image Turbo (4 bits en 8 GB), SDXL como opción ligera, Wan 2.1 1.3B, LTX-Video, MusicGen |
 | **Google** | Ventana de **Google Flow** con tu cuenta (importa automáticamente lo que descargues) + **Imagen 4**, **Gemini Omni Flash** y **Veo** por API. | Gemini API |
 | **Exportación** | Preajustes TikTok / Reels / Shorts / Borrador / Máster 4K o personalizado: 540p–2160p, 24/30/60 fps, H.264 / H.265 / AV1, 4 niveles de calidad, NVENC, SRT y portada JPG, sólo audio MP3. | FFmpeg (NVENC en RTX) |
-| **Modelos** | Descarga con progreso, estado de VRAM, perfil recomendado, fuentes OFL para subtítulos, instalación de extras. | Hugging Face Hub |
+| **Modelos** | Descarga con progreso, **eliminación de modelos descargados** (sin romper archivos compartidos), limpieza de la caché de renders, estado de VRAM, perfil recomendado, fuentes OFL, instalación de extras. | Hugging Face Hub |
 | **Explorar Hugging Face** | Destacados recientes (FLUX.2 [klein] 4B, Z-Image Turbo, Wan 2.2 TI2V 5B) y búsqueda en directo de los modelos en tendencia (imagen, texto→vídeo, imagen→vídeo) con estimación de compatibilidad con tu GPU. Cualquier modelo en formato diffusers se añade con un clic y se usa con un cargador genérico que elige la estrategia de memoria (GPU completa, descarga por componentes o capa a capa). | Hub API + diffusers |
 
 Interfaz oscura minimalista con animaciones en botones (ripple, brillo, resortes), transiciones entre páginas,
