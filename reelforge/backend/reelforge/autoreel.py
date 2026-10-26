@@ -56,6 +56,8 @@ class AutoReelRequest(BaseModel):
     width: int = 1080
     height: int = 1920
     fps: int = 30
+    auto_edit: bool = True
+    brand: bool = True
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -191,5 +193,15 @@ def build(ctx: JobContext, req: AutoReelRequest) -> dict:
         script={"title": req.title, "hook": req.hook, "scenes": [s.model_dump() for s in scenes], **req.extra},
     )
     project.format.width, project.format.height, project.format.fps = req.width, req.height, req.fps
+    if req.auto_edit:
+        ctx.progress(0.95, "Edición viral automática…")
+        from . import retention
+
+        retention.auto_edit(_Sub(ctx, 0.95, 0.99), project, retention.AutoEditOptions(
+            cut_silences=False, jump_zoom=False, broll="none", whisper_model=req.whisper_model, lang=req.lang))
+    if req.brand:
+        from . import brand
+
+        brand.apply_brand(project)
     save_project(project)
     return {"project_id": project.id, "duration": round(sum(durations), 2)}

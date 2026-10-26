@@ -61,6 +61,18 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "export_preset": "tiktok",
     "caption_style": "viral",
     "accent": "violet",
+    # Kit de marca
+    "brand_logo_media_id": "",
+    "brand_logo_pos": "top-right",
+    "brand_logo_scale": 0.16,
+    "brand_logo_opacity": 0.85,
+    "brand_handle": "",
+    "brand_keyword_color": "",
+    "brand_cta": "Sígueme para más",
+    "brand_cta_enabled": True,
+    "brand_intro_media_id": "",
+    "brand_outro_media_id": "",
+    "auto_edit_defaults": True,
 }
 
 SENSITIVE_KEYS = {"gemini_api_key", "hf_token"}

@@ -14,7 +14,8 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import autoreel, captions, catalog, config, ffmpeg, gpu, project, render
+from . import (analysis, assets, autoreel, batch, brand, captions, catalog, clipper, config, ffmpeg, gpu, project,
+               render, retention)
 from .ai import google, hub, image, llm, music, stt, tts, video
 from .jobs import jobs
 
@@ -104,6 +105,8 @@ def meta() -> dict:
         "music": {"models": music.MODELS, "license": music.LICENSE},
         "whisper": stt.MODELS,
         "fonts": catalog.fonts_status(),
+        "templates": {k: {kk: vv for kk, vv in v.items() if kk != "instructions"} for k, v in llm.TEMPLATES.items()},
+        "sfx": {k: v[0] for k, v in assets.SFX.items()},
     }
 
 
@@ -321,6 +324,67 @@ def export_file(name: str):
     return FileResponse(path)
 
 
+# ---------------------------------------------------------- edición viral
+
+
+@app.post("/api/projects/{project_id}/auto-edit")
+def project_auto_edit(project_id: str, opts: retention.AutoEditOptions) -> dict:
+    _project_or_404(project_id)
+
+    def run(ctx):
+        p = project.load_project(project_id)
+        report = retention.auto_edit(ctx, p, opts)
+        project.save_project(p)
+        return report
+
+    return _job("auto-edit", "Edición viral automática", run)
+
+
+@app.get("/api/projects/{project_id}/score")
+def project_score(project_id: str) -> dict:
+    p = _project_or_404(project_id)
+    p.score = analysis.retention_score(p)
+    project.save_project(p)
+    return p.score
+
+
+@app.post("/api/projects/{project_id}/brand")
+def project_brand(project_id: str) -> dict:
+    p = _project_or_404(project_id)
+    brand.apply_brand(p)
+    project.save_project(p)
+    return {"ok": True}
+
+
+@app.post("/api/sfx/{name}")
+def sfx_media(name: str) -> dict:
+    if name not in assets.SFX:
+        raise HTTPException(404, "Efecto desconocido")
+    return project.get_media(assets.sfx_media(name)).model_dump()
+
+
+@app.post("/api/clipper")
+def clipper_run(b: clipper.ClipperRequest) -> dict:
+    _media_or_404(b.media_id)
+    return _job("clipper", "Clips virales desde vídeo largo", lambda ctx: clipper.run(ctx, b))
+
+
+@app.get("/api/clipper/{media_id}")
+def clipper_results(media_id: str) -> list[dict]:
+    return clipper.load_results(media_id)
+
+
+@app.post("/api/batch")
+def batch_run(b: batch.BatchRequest) -> dict:
+    n = len([t for t in b.topics if t.strip()])
+    return _job("batch", f"Lote de {n} reels", lambda ctx: batch.run(ctx, b))
+
+
+@app.get("/api/batches")
+def batches() -> list[dict]:
+    return batch.list_batches()
+
+
 # ------------------------------------------------------------------- trabajos
 
 
@@ -442,12 +506,14 @@ class ScriptBody(BaseModel):
     lang: str = "es"
     provider: Optional[str] = None
     extra: str = ""
+    template: str = "auto"
 
 
 @app.post("/api/script")
 def script(b: ScriptBody) -> dict:
     return _job("script", "Escribiendo guion", lambda ctx: llm.write_script(b.topic, b.tone, b.seconds, b.platform,
-                                                                            b.lang, b.provider, b.extra), "io")
+                                                                            b.lang, b.provider, b.extra,
+                                                                            b.template), "io")
 
 
 class TextBody(BaseModel):

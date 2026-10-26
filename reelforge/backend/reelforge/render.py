@@ -14,7 +14,7 @@ from typing import Callable, Optional
 
 from pydantic import BaseModel
 
-from . import captions, config, ffmpeg
+from . import assets, captions, config, ffmpeg
 from .project import Clip, Project, clip_lengths, effective_transitions, get_media, new_id
 
 # Etiqueta -> nombre del efecto xfade de FFmpeg
@@ -101,6 +101,7 @@ class ExportOptions(BaseModel):
     thumbnail: bool = False
     filename: Optional[str] = None
     burn_captions: bool = True
+    cover_text: Optional[str] = None  # portada con texto grande
 
 
 @dataclass
@@ -178,6 +179,42 @@ def _fit_chain(fit: str, w: int, h: int) -> str:
     return f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
 
 
+def _track_x(clip: Clip, w: int) -> str:
+    """Expresión x de `crop` que sigue al sujeto (interpolación lineal entre fotogramas clave)."""
+    pts = sorted(((t - clip.src_in) / max(0.1, clip.speed), min(1.0, max(0.0, cx))) for t, cx in clip.track)
+    if not pts:
+        return "(iw-ow)/2"
+    # Los clips divididos comparten la pista en tiempo de origen: se recorta a este tramo.
+    before = [p for p in pts if p[0] <= 0]
+    after = [p for p in pts if p[0] > 0]
+    if before and after:
+        (t0, c0), (t1, c1) = before[-1], after[0]
+        start_val = c0 + (c1 - c0) * (0 - t0) / max(0.001, t1 - t0)
+    else:
+        start_val = (before[-1] if before else after[0])[1]
+    kf = [(0.0, start_val)] + after
+    expr = f"{kf[-1][1]:.4f}"
+    for i in range(len(kf) - 1, 0, -1):
+        (t0, c0), (t1, c1) = kf[i - 1], kf[i]
+        seg = f"{c0:.4f}+({c1 - c0:.4f})*(t-{t0:.3f})/{max(0.001, t1 - t0):.3f}"
+        expr = f"if(lt(t,{t1:.3f}),{seg},{expr})"
+    expr = f"if(lt(t,{kf[0][0]:.3f}),{kf[0][1]:.4f},{expr})"
+    return f"min(max(0,({expr})*iw-{w}/2),iw-{w})"
+
+
+def _video_frame_chain(clip: Clip, w: int, h: int) -> str:
+    """Encuadre de un clip de vídeo: cover/blur/contain, seguimiento de sujeto y jump-zoom."""
+    if clip.fit == "track":
+        chain = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+                 f"crop={w}:{h}:x='{_track_x(clip, w)}':y='(ih-oh)/2',setsar=1")
+    else:
+        chain = _fit_chain(clip.fit, w, h)
+    if clip.zoom > 1.001:
+        chain += (f",scale=trunc(iw*{clip.zoom:.3f}/2)*2:trunc(ih*{clip.zoom:.3f}/2)*2,"
+                  f"crop={w}:{h}:(iw-ow)/2:(ih-oh)*0.35,setsar=1")
+    return chain
+
+
 def _motion_expr(motion: str, frames: int) -> tuple[str, str, str]:
     p = f"(on/{max(1, frames - 1)})"
     center_x, center_y = "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
@@ -219,7 +256,7 @@ def _segment_command(clip: Clip, media_path: str, has_audio: bool, length: float
         if not has_audio:
             args += ["-f", "lavfi", "-t", f"{length:.3f}", "-i", "anullsrc=r=48000:cl=stereo"]
         vf = (
-            f"[0:v]setpts=(PTS-STARTPTS)/{clip.speed:.4f},fps={fps},{_fit_chain(clip.fit, w, h)}"
+            f"[0:v]setpts=(PTS-STARTPTS)/{clip.speed:.4f},fps={fps},{_video_frame_chain(clip, w, h)}"
             f"{',' + color if color else ''},tpad=stop_mode=clone:stop_duration={length:.3f},"
             f"trim=duration={length:.3f},setpts=PTS-STARTPTS,format=yuv420p[v]"
         )
@@ -262,7 +299,7 @@ def _segment_key(clip: Clip, media_path: str, length: float, size: RenderSize) -
         "len": round(length, 3),
         "size": [size.width, size.height, size.fps],
         "enc": _intermediate_args(),
-        "v": 3,
+        "v": 4,
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:20]
 
@@ -342,9 +379,88 @@ def render_project(
         vcur, acur = vtag, atag
         acc += lengths[i] - t
 
-    # Subtítulos y textos
-    has_text = (project.captions.enabled and project.captions.words) or project.texts
+    settings = config.load_settings()
+    k = size.width / 1080
+    next_input = n
+
+    def add_input(*args: str) -> int:
+        nonlocal next_input
+        inputs.extend(args)
+        next_input += 1
+        return next_input - 1
+
     vfinal = vcur
+    if not opts.audio_only:
+        # B-roll: planos de recurso a pantalla completa sobre el vídeo (la voz sigue sonando)
+        for bi, br in enumerate(sorted(project.broll, key=lambda b: b.start)):
+            media = get_media(br.media_id)
+            if not media or not Path(media.path).is_file() or br.start >= total:
+                continue
+            dur = max(0.3, min(br.duration, total - br.start))
+            bclip = Clip(media_id=br.media_id, kind="image" if media.kind == "image" else "video", duration=dur,
+                         src_in=br.src_in, src_out=br.src_in + dur if media.kind == "video" else None,
+                         motion=br.motion, fit="cover", filter=br.filter)
+            seg = seg_dir / f"{_segment_key(bclip, media.path, dur, size)}.mkv"
+            if not seg.exists():
+                tmp = seg.with_suffix(".part.mkv")
+                ffmpeg.run_with_progress(_segment_command(bclip, media.path, media.has_audio, dur, size, tmp), dur,
+                                         lambda p: progress(0.5, "Preparando B-roll"), track=track)
+                tmp.replace(seg)
+            ii = add_input("-i", str(seg))
+            fade = min(0.12, dur / 4)
+            graph.append(
+                f"[{ii}:v]format=yuva420p,fade=t=in:st=0:d={fade:.3f}:alpha=1,"
+                f"fade=t=out:st={dur - fade:.3f}:d={fade:.3f}:alpha=1,setpts=PTS-STARTPTS+{br.start:.3f}/TB[bro{bi}]"
+            )
+            graph.append(f"[{vfinal}][bro{bi}]overlay=0:0:enable='between(t,{br.start:.3f},{br.start + dur:.3f})'"
+                         f":eof_action=pass[brv{bi}]")
+            vfinal = f"brv{bi}"
+
+        # Zooms de impacto y temblores (una sola pasada de zoompan) + flashes
+        punch = [e for e in project.effects if e.type in ("punch", "shake") and e.start < total]
+        if punch:
+            z_terms, x_terms, y_terms = [], [], []
+            for e in punch:
+                a_, b_ = e.start, e.start + e.duration
+                win = f"between(in_time,{a_:.3f},{b_:.3f})"
+                if e.type == "punch":
+                    z_terms.append(f"{0.14 * e.strength:.3f}*min(1,(in_time-{a_:.3f})/0.06)*{win}")
+                else:
+                    z_terms.append(f"{0.06 * e.strength:.3f}*{win}")
+                    x_terms.append(f"{18 * e.strength * k:.1f}*sin(in_time*95)*{win}")
+                    y_terms.append(f"{12 * e.strength * k:.1f}*cos(in_time*71)*{win}")
+            z = "1+" + "+".join(z_terms)
+            x = "iw/2-(iw/zoom/2)" + "".join(f"+{t}" for t in x_terms)
+            y = "ih/2-(ih/zoom/2)" + "".join(f"+{t}" for t in y_terms)
+            graph.append(f"[{vfinal}]zoompan=z='{z}':x='{x}':y='{y}':d=1:s={size.width}x{size.height}"
+                         f":fps={size.fps},setsar=1[fxz]")
+            vfinal = "fxz"
+        flashes = [e for e in project.effects if e.type == "flash" and e.start < total]
+        if flashes:
+            cond = "+".join(f"between(t,{e.start:.3f},{e.start + e.duration:.3f})" for e in flashes)
+            graph.append(f"[{vfinal}]eq=brightness=0.45:enable='{cond}'[fxf]")
+            vfinal = "fxf"
+
+        # Emojis sobre los subtítulos
+        if project.captions.enabled:
+            em_size = int(150 * k * project.captions.scale)
+            y_em = int(size.height * project.captions.position - em_size - 95 * k * project.captions.scale)
+            for ei, word in enumerate(w for w in project.captions.words if w.emoji):
+                png = assets.emoji_png(word.emoji or "")
+                if not png or word.s >= total:
+                    continue
+                dur = min(0.9, total - word.s)
+                ii = add_input("-loop", "1", "-framerate", str(size.fps), "-t", f"{dur:.3f}", "-i", str(png))
+                graph.append(f"[{ii}:v]format=rgba,scale={em_size}:-1,fade=t=in:st=0:d=0.08:alpha=1,"
+                             f"fade=t=out:st={max(0.0, dur - 0.1):.3f}:d=0.1:alpha=1,"
+                             f"setpts=PTS-STARTPTS+{word.s:.3f}/TB[emo{ei}]")
+                graph.append(f"[{vfinal}][emo{ei}]overlay=(W-w)/2:{y_em}:enable='between(t,{word.s:.3f},"
+                             f"{word.s + dur:.3f})':eof_action=pass[emv{ei}]")
+                vfinal = f"emv{ei}"
+
+    # Subtítulos, textos y @usuario
+    handle = (settings.get("brand_handle") or "").strip() if project.brand else ""
+    has_text = (project.captions.enabled and project.captions.words) or project.texts or handle
     if has_text and opts.burn_captions and not opts.audio_only:
         ass = work / "captions.ass"
         captions.write_ass(
@@ -359,14 +475,33 @@ def render_project(
             scale=project.captions.scale,
             overlays=[t.model_dump() for t in project.texts],
             captions_enabled=project.captions.enabled,
+            emph_color=settings.get("brand_keyword_color") or None,
+            handle=handle or None,
+            total=total,
         )
         fonts = f":fontsdir={ffmpeg.escape_filter_path(config.FONTS_DIR)}" if config.FONTS_DIR.is_dir() else ""
-        graph.append(f"[{vcur}]subtitles=captions.ass{fonts},format=yuv420p[vout]")
-        vfinal = "vout"
+        graph.append(f"[{vfinal}]subtitles=captions.ass{fonts},format=yuv420p[vsub]")
+        vfinal = "vsub"
+
+    # Logo de marca
+    logo = get_media(settings.get("brand_logo_media_id") or "") if project.brand and not opts.audio_only else None
+    if logo and logo.kind == "image" and Path(logo.path).is_file():
+        ii = add_input("-loop", "1", "-i", logo.path)
+        lw = _even(size.width * float(settings.get("brand_logo_scale") or 0.16))
+        margin = int(40 * k)
+        pos = {
+            "top-left": (f"{margin}", f"{int(120 * k)}"),
+            "top-right": (f"W-w-{margin}", f"{int(120 * k)}"),
+            "bottom-left": (f"{margin}", f"H-h-{int(260 * k)}"),
+            "bottom-right": (f"W-w-{margin}", f"H-h-{int(260 * k)}"),
+        }.get(settings.get("brand_logo_pos") or "top-right", (f"W-w-{margin}", f"{int(120 * k)}"))
+        opacity = max(0.1, min(1.0, float(settings.get("brand_logo_opacity") or 0.85)))
+        graph.append(f"[{ii}:v]format=rgba,scale={lw}:-1,colorchannelmixer=aa={opacity:.2f}[logo]")
+        graph.append(f"[{vfinal}][logo]overlay={pos[0]}:{pos[1]}:shortest=1,format=yuv420p[vlogo]")
+        vfinal = "vlogo"
 
     # Pistas de audio
     voices, musics = [], []
-    idx = n
     for item in project.audio:
         media = get_media(item.media_id)
         if not media or not Path(media.path).is_file():
@@ -376,8 +511,8 @@ def render_project(
             continue
         play = min(src_len, total - item.start) if not item.loop else total - item.start
         if item.loop:
-            inputs += ["-stream_loop", "-1"]
-        inputs += ["-ss", f"{item.src_in:.3f}", "-t", f"{play:.3f}", "-i", media.path]
+            inputs += ["-stream_loop", "-1"]  # opción de entrada: precede al -i de add_input
+        idx = add_input("-ss", f"{item.src_in:.3f}", "-t", f"{play:.3f}", "-i", media.path)
         chain = f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,volume={item.volume:.3f}"
         if item.fade_in > 0:
             chain += f",afade=t=in:d={item.fade_in:.2f}"
@@ -389,7 +524,6 @@ def render_project(
         tag = f"tr{idx}"
         graph.append(f"{chain}[{tag}]")
         (musics if item.role == "music" else voices).append(tag)
-        idx += 1
 
     mix_inputs = [acur]
     if voices:
@@ -473,7 +607,18 @@ def render_project(
         extras["srt"] = str(srt)
     if opts.thumbnail and not opts.audio_only:
         thumb = out_path.with_suffix(".jpg")
-        ffmpeg.thumbnail(out_path, thumb, at=min(1.0, total / 3), width=size.width)
+        at = min(1.0, total / 3)
+        if opts.cover_text and opts.cover_text.strip():
+            cover = work / "cover.ass"
+            captions.write_ass(cover, width=size.width, height=size.height, words=[], captions_enabled=False,
+                               overlays=[{"text": opts.cover_text.strip().upper(), "start": 0, "end": 3600,
+                                          "style": "title", "position": 0.45, "scale": 1.45}])
+            fonts = f":fontsdir={ffmpeg.escape_filter_path(config.FONTS_DIR)}" if config.FONTS_DIR.is_dir() else ""
+            # -ss tras -i: el filtro ve la marca de tiempo real y el texto ya terminó su animación de entrada.
+            ffmpeg.run([ffmpeg.binary(), "-hide_banner", "-y", "-i", str(out_path), "-ss", f"{at:.3f}",
+                        "-vf", f"subtitles=cover.ass{fonts}", "-frames:v", "1", "-q:v", "2", str(thumb)], cwd=work)
+        else:
+            ffmpeg.thumbnail(out_path, thumb, at=at, width=size.width)
         extras["thumbnail"] = str(thumb)
     progress(1.0, "Listo")
     return {

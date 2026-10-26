@@ -17,6 +17,7 @@ FONT_FILES = {
     "Bangers": "Bangers-Regular.ttf",
     "Bebas Neue": "BebasNeue-Regular.ttf",
     "Archivo Black": "ArchivoBlack-Regular.ttf",
+    "Noto Color Emoji": "NotoColorEmoji.ttf",
 }
 
 FONT_URLS = {
@@ -26,10 +27,12 @@ FONT_URLS = {
     "Bangers-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/bangers/Bangers-Regular.ttf",
     "BebasNeue-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/bebasneue/BebasNeue-Regular.ttf",
     "ArchivoBlack-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/archivoblack/ArchivoBlack-Regular.ttf",
+    "NotoColorEmoji.ttf": "https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf",
 }
 
 STYLES: dict[str, dict] = {
     "viral": {
+        "emph": "#39FF6A",
         "name": "Viral (Hormozi)",
         "font": "Poppins Black",
         "fallback": "Arial Black",
@@ -44,6 +47,7 @@ STYLES: dict[str, dict] = {
         "uppercase": True,
     },
     "beast": {
+        "emph": "#FFE600",
         "name": "Beast",
         "font": "Bangers",
         "fallback": "Impact",
@@ -58,6 +62,7 @@ STYLES: dict[str, dict] = {
         "uppercase": True,
     },
     "highlight": {
+        "emph": "#FFE600",
         "name": "Resaltado",
         "font": "Poppins ExtraBold",
         "fallback": "Arial Black",
@@ -72,6 +77,7 @@ STYLES: dict[str, dict] = {
         "uppercase": False,
     },
     "karaoke": {
+        "emph": "#FFE600",
         "name": "Karaoke",
         "font": "Archivo Black",
         "fallback": "Arial Black",
@@ -86,6 +92,7 @@ STYLES: dict[str, dict] = {
         "uppercase": True,
     },
     "oneword": {
+        "emph": "#FFE600",
         "name": "Una palabra",
         "font": "Anton",
         "fallback": "Impact",
@@ -100,6 +107,7 @@ STYLES: dict[str, dict] = {
         "uppercase": True,
     },
     "neon": {
+        "emph": "#00E5FF",
         "name": "Neón",
         "font": "Bebas Neue",
         "fallback": "Impact",
@@ -114,6 +122,7 @@ STYLES: dict[str, dict] = {
         "uppercase": True,
     },
     "minimal": {
+        "emph": "#FFD54A",
         "name": "Minimalista",
         "font": "Poppins ExtraBold",
         "fallback": "Segoe UI Semibold",
@@ -130,6 +139,7 @@ STYLES: dict[str, dict] = {
 }
 
 OVERLAY_STYLES = {
+    "handle": {"size": 40, "primary": "#FFFFFF", "back": "#000000", "box": False},
     "title": {"size": 96, "primary": "#FFFFFF", "back": "#000000", "box": True},
     "label": {"size": 70, "primary": "#000000", "back": "#FFE600", "box": True},
     "outline": {"size": 92, "primary": "#FFFFFF", "back": "#000000", "box": False},
@@ -141,6 +151,7 @@ class W:
     w: str
     s: float
     e: float
+    emph: bool = False
 
 
 def ass_color(hex_color: str, alpha: int = 0) -> str:
@@ -227,15 +238,21 @@ def _style_line(name: str, font: str, size: float, primary: str, secondary: str,
     )
 
 
-def _caption_events(groups: list[list[W]], st: dict, k: float, cx: int, cy: int, uppercase: bool) -> list[str]:
+def _caption_events(groups: list[list[W]], st: dict, k: float, cx: int, cy: int, uppercase: bool,
+                    emph_color: str | None = None) -> list[str]:
     effect = st["effect"]
     active = ass_color(st["active"])
     primary = ass_color(st["primary"])
+    emph = ass_color(emph_color or st.get("emph", st["active"]))
     events: list[str] = []
 
     def txt(word: W) -> str:
         t = clean(word.w)
         return t.upper() if uppercase else t
+
+    def plain(word: W) -> str:
+        # Palabra no activa: las palabras clave conservan su color de énfasis.
+        return f"{{\\c{emph}}}{txt(word)}{{\\c{primary}}}" if word.emph else txt(word)
 
     pos = f"\\an5\\pos({cx},{cy})"
     for gi, group in enumerate(groups):
@@ -245,7 +262,7 @@ def _caption_events(groups: list[list[W]], st: dict, k: float, cx: int, cy: int,
         if nxt is not None:
             g_end = nxt if nxt - group[-1].e < 0.7 else min(g_end, nxt)
         if effect == "fade":
-            text = " ".join(txt(w) for w in group)
+            text = " ".join(plain(w) for w in group)
             events.append(f"Dialogue: 0,{ass_time(g_start)},{ass_time(g_end)},Caption,,0,0,0,,{{{pos}\\fad(120,120)}}{text}")
             continue
         if effect == "karaoke":
@@ -264,7 +281,7 @@ def _caption_events(groups: list[list[W]], st: dict, k: float, cx: int, cy: int,
             for j, other in enumerate(group):
                 t = txt(other)
                 if j != i:
-                    words.append(t)
+                    words.append(plain(other))
                     continue
                 if effect == "box":
                     pad = max(8, int(14 * k))
@@ -275,7 +292,8 @@ def _caption_events(groups: list[list[W]], st: dict, k: float, cx: int, cy: int,
                     )
                 else:  # pop / neon
                     words.append(
-                        f"{{\\c{active}\\t(0,70,\\fscx120\\fscy120)\\t(70,160,\\fscx108\\fscy108)}}{t}"
+                        f"{{\\c{emph if other.emph else active}\\t(0,70,\\fscx{132 if other.emph else 120}\\fscy{132 if other.emph else 120})"
+                        f"\\t(70,160,\\fscx108\\fscy108)}}{t}"
                         f"{{\\c{primary}\\fscx100\\fscy100}}"
                     )
             line = " ".join(words)
@@ -303,6 +321,9 @@ def build_ass(
     scale: float = 1.0,
     overlays: list[dict] | None = None,
     captions_enabled: bool = True,
+    emph_color: str | None = None,
+    handle: str | None = None,
+    total: float | None = None,
 ) -> str:
     st = STYLES.get(style_id, STYLES["viral"])
     k = width / 1080 * scale
@@ -343,10 +364,11 @@ def build_ass(
         )
     events: list[str] = []
     if captions_enabled and words:
-        ws = [w if isinstance(w, W) else W(str(w["w"]), float(w["s"]), float(w["e"])) for w in words]
+        ws = [w if isinstance(w, W) else W(str(w["w"]), float(w["s"]), float(w["e"]), bool(w.get("emph")))
+              for w in words]
         ws.sort(key=lambda w: w.s)
         groups = group_words(ws, max_words or st["max_words"], max_chars=max(10, int(22 / max(0.6, scale))))
-        events += _caption_events(groups, st, k, width // 2, int(height * position), upper)
+        events += _caption_events(groups, st, k, width // 2, int(height * position), upper, emph_color)
     for ov in overlays or []:
         name = ov.get("style", "title")
         if name not in OVERLAY_STYLES:
@@ -358,6 +380,10 @@ def build_ass(
         events.append(
             f"Dialogue: 5,{ass_time(float(ov.get('start', 0)))},{ass_time(float(ov.get('end', 3)))},Ov_{name},,0,0,0,,{{{anim}}}{text}"
         )
+    if handle and total:
+        # Marca de agua con el @usuario: discreta, abajo a la derecha, siempre visible.
+        pos = f"\\an3\\pos({width - int(40 * ok)},{height - int(150 * ok)})\\1a&H40&\\3a&H60&"
+        events.append(f"Dialogue: 6,{ass_time(0)},{ass_time(total)},Ov_handle,,0,0,0,,{{{pos}}}{clean(handle)}")
     return _header(width, height, styles) + "\n" + "\n".join(events) + "\n"
 
 

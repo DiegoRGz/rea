@@ -65,7 +65,34 @@ def ollama_status() -> dict[str, Any]:
         return {"running": False, "models": [], "error": str(exc)}
 
 
-def _ollama(system: str, user: str) -> str:
+TEMPLATES: dict[str, dict[str, Any]] = {
+    "auto": {"name": "Libre", "emoji": "✨", "caption_style": None, "transition": None,
+             "instructions": ""},
+    "top": {"name": "Top N", "emoji": "🏆", "caption_style": "beast", "transition": "zoomin",
+            "instructions": "Formato TOP: anuncia el número en el gancho (\"Top 5…\"), una escena por puesto contando "
+                            "hacia atrás y deja el mejor para el final. Cada escena empieza con \"Número X:\"."},
+    "sabias": {"name": "¿Sabías que…?", "emoji": "🤯", "caption_style": "viral", "transition": "smoothup",
+               "instructions": "Formato DATO CURIOSO: el gancho es una pregunta sorprendente; cada escena revela un "
+                               "dato más impactante que el anterior; termina con un giro inesperado."},
+    "historia": {"name": "Historia en 3 actos", "emoji": "🎬", "caption_style": "minimal", "transition": "fadeblack",
+                 "instructions": "Formato STORYTELLING: empieza en el momento de máxima tensión, luego contexto, "
+                                 "conflicto y resolución con moraleja. Frases muy visuales."},
+    "mitos": {"name": "Mitos vs. realidad", "emoji": "❌", "caption_style": "highlight", "transition": "slideleft",
+              "instructions": "Formato MITO/REALIDAD: alterna escenas \"Mito: …\" y \"Realidad: …\". El gancho "
+                              "promete desmontar una creencia muy extendida."},
+    "antes": {"name": "Antes y después", "emoji": "🔁", "caption_style": "viral", "transition": "wipeleft",
+              "instructions": "Formato TRANSFORMACIÓN: muestra el problema (antes), el proceso en pasos y el "
+                              "resultado (después). El gancho enseña el resultado final primero."},
+    "tutorial": {"name": "Tutorial rápido", "emoji": "⚡", "caption_style": "karaoke", "transition": "smoothleft",
+                 "instructions": "Formato TUTORIAL: promete un resultado en X pasos; cada escena es un paso "
+                                 "accionable que empieza con un verbo. Cierra con \"guárdalo para luego\"."},
+    "polemica": {"name": "Opinión polémica", "emoji": "🔥", "caption_style": "beast", "transition": "fadewhite",
+                 "instructions": "Formato OPINIÓN IMPOPULAR: el gancho es una afirmación contundente que divide; "
+                                 "argumenta con 2-3 razones y termina invitando a comentar si están de acuerdo."},
+}
+
+
+def _ollama(system: str, user: str, num_ctx: int = 4096) -> str:
     s = config.load_settings()
     r = httpx.post(
         f"{s['ollama_url'].rstrip('/')}/api/chat",
@@ -76,7 +103,7 @@ def _ollama(system: str, user: str) -> str:
             "stream": False,
             "think": False,
             "keep_alive": 0,  # libera la VRAM al terminar para los modelos de imagen/vídeo
-            "options": {"temperature": 0.85, "num_ctx": 4096},
+            "options": {"temperature": 0.85, "num_ctx": num_ctx},
         },
         timeout=300,
     )
@@ -85,13 +112,14 @@ def _ollama(system: str, user: str) -> str:
 
 
 def _gemini(system: str, user: str) -> str:
-    from google import genai
     from google.genai import types
 
     s = config.load_settings()
     if not s.get("gemini_api_key"):
         raise RuntimeError("Falta la clave de API de Gemini (Ajustes)")
-    client = genai.Client(api_key=s["gemini_api_key"])
+    from .google import _client
+
+    client = _client()
     resp = client.models.generate_content(
         model=s["gemini_text_model"],
         contents=user,
@@ -120,9 +148,22 @@ def _template(topic: str, scenes: int) -> dict[str, Any]:
     }
 
 
+def chat_json(system: str, user: str, num_ctx: int = 8192) -> dict[str, Any]:
+    """Consulta al LLM configurado y devuelve JSON. Lanza excepción si no hay LLM disponible."""
+    provider = config.load_settings().get("llm_provider", "ollama")
+    if provider == "none":
+        raise RuntimeError("Sin LLM configurado")
+    raw = _gemini(system, user) if provider == "gemini" else _ollama(system, user, num_ctx)
+    return _extract_json(raw)
+
+
 def write_script(topic: str, tone: str = "intrigante", seconds: int = 30, platform: str = "TikTok",
-                 lang: str = "es", provider: str | None = None, extra: str = "") -> dict[str, Any]:
+                 lang: str = "es", provider: str | None = None, extra: str = "",
+                 template: str = "auto") -> dict[str, Any]:
     provider = provider or config.load_settings().get("llm_provider", "ollama")
+    tpl = TEMPLATES.get(template, TEMPLATES["auto"])["instructions"]
+    if tpl:
+        extra = f"{tpl} {extra}".strip()
     words = int(seconds * 2.6)
     scenes = max(3, min(10, round(seconds / 5)))
     system = SYSTEM.format(lang=LANGS.get(lang, lang))

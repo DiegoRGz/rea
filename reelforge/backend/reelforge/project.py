@@ -43,6 +43,8 @@ class Clip(BaseModel):
     fit: str = "cover"  # cover | blur | contain
     filter: str = "none"
     transition: Transition = Field(default_factory=Transition)
+    zoom: float = 1.0  # zoom fijo (jump-zoom) en clips de vídeo
+    track: list[list[float]] = Field(default_factory=list)  # [[t_origen, centro_x 0..1]] para fit="track"
 
     def length(self, media_duration: float | None = None) -> float:
         if self.kind == "image":
@@ -62,12 +64,35 @@ class AudioItem(BaseModel):
     fade_in: float = 0.0
     fade_out: float = 0.0
     loop: bool = False
+    auto: bool = False  # creado por la edición automática (se reemplaza al repetirla)
 
 
 class Word(BaseModel):
     w: str
     s: float
     e: float
+    emph: bool = False  # palabra clave resaltada en color
+    emoji: Optional[str] = None  # emoji que aparece sobre el subtítulo
+
+
+class Effect(BaseModel):
+    id: str = Field(default_factory=new_id)
+    type: Literal["punch", "shake", "flash"] = "punch"
+    start: float
+    duration: float = 0.35
+    strength: float = 1.0
+    auto: bool = False
+
+
+class BRoll(BaseModel):
+    id: str = Field(default_factory=new_id)
+    media_id: str
+    start: float
+    duration: float = 2.0
+    src_in: float = 0.0
+    motion: str = "zoom_in"
+    filter: str = "none"
+    auto: bool = False
 
 
 class Captions(BaseModel):
@@ -110,6 +135,10 @@ class Project(BaseModel):
     ducking: bool = True
     loudnorm: bool = True
     script: Optional[dict] = None
+    effects: list[Effect] = Field(default_factory=list)
+    broll: list[BRoll] = Field(default_factory=list)
+    brand: bool = True  # aplicar el kit de marca (logo, @usuario) al exportar
+    score: Optional[dict] = None
 
 
 class MediaItem(BaseModel):
