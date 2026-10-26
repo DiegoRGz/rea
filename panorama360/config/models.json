@@ -1,0 +1,90 @@
+{
+  "_nota": "Catálogo de modelos. Puedes editar este archivo o añadir modelos desde la pestaña Modelos (se guardan en datos/modelos_usuario.json). Todos son de la familia SDXL para compartir el LoRA 360 y el adaptador de referencia.",
+  "lora_360": {
+    "source": "artificialguybr/360Redmond",
+    "weight_name": null,
+    "trigger": "360 view, equirectangular panorama",
+    "weight": 0.85,
+    "page": "https://huggingface.co/artificialguybr/360Redmond"
+  },
+  "ip_adapter": {
+    "source": "h94/IP-Adapter",
+    "subfolder": "sdxl_models",
+    "weight_name": "ip-adapter-plus_sdxl_vit-h.safetensors",
+    "image_encoder_folder": "models/image_encoder"
+  },
+  "upscaler": {
+    "name": "Real-ESRGAN x4plus",
+    "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+    "file": "RealESRGAN_x4plus.pth",
+    "scale": 4
+  },
+  "models": [
+    {
+      "key": "realvis-xl-5",
+      "name": "RealVisXL 5.0",
+      "style": "Fotorrealista",
+      "description": "Fotografía realista: paisajes, arquitectura, estadios, interiores. Recomendado para escenas como fotos reales.",
+      "source": "SG161222/RealVisXL_V5.0",
+      "variant": "fp16",
+      "size_gb": 6.9,
+      "steps": 30,
+      "cfg": 5.5,
+      "scheduler": "dpmpp_2m_karras",
+      "use_360_lora": true,
+      "default": true
+    },
+    {
+      "key": "juggernaut-xl-9",
+      "name": "Juggernaut XL 9",
+      "style": "Fotorrealista cinematográfico",
+      "description": "Realismo con iluminación más dramática y colores de cine.",
+      "source": "RunDiffusion/Juggernaut-XL-v9",
+      "variant": "fp16",
+      "size_gb": 6.9,
+      "steps": 30,
+      "cfg": 5.0,
+      "scheduler": "dpmpp_2m_karras",
+      "use_360_lora": true
+    },
+    {
+      "key": "sdxl-base",
+      "name": "SDXL Base 1.0",
+      "style": "General",
+      "description": "Modelo original de Stability AI: versátil, buena referencia para comparar.",
+      "source": "stabilityai/stable-diffusion-xl-base-1.0",
+      "variant": "fp16",
+      "size_gb": 6.9,
+      "steps": 30,
+      "cfg": 6.5,
+      "scheduler": "dpmpp_2m_karras",
+      "use_360_lora": true
+    },
+    {
+      "key": "dreamshaper-xl-turbo",
+      "name": "DreamShaper XL Turbo",
+      "style": "Artístico · rápido",
+      "description": "Ilustración y fantasía semirrealista en solo 8 pasos: el más rápido para probar ideas en lote.",
+      "source": "Lykon/dreamshaper-xl-v2-turbo",
+      "variant": "fp16",
+      "size_gb": 6.9,
+      "steps": 8,
+      "cfg": 2.0,
+      "scheduler": "dpmpp_sde_karras",
+      "use_360_lora": true
+    },
+    {
+      "key": "animagine-xl-3-1",
+      "name": "Animagine XL 3.1",
+      "style": "Anime",
+      "description": "Escenarios estilo anime e ilustración japonesa.",
+      "source": "cagliostrolab/animagine-xl-3.1",
+      "variant": null,
+      "size_gb": 6.9,
+      "steps": 28,
+      "cfg": 6.0,
+      "scheduler": "euler_a",
+      "use_360_lora": true
+    }
+  ]
+}
