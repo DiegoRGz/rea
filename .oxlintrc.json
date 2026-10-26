@@ -191,7 +191,8 @@
     ".codex",
     ".devin",
     ".factory",
-    "third_party"
+    "third_party",
+    "reelforge"
   ],
   "options": {
     "reportUnusedDisableDirectives": "error"

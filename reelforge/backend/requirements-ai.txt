@@ -1,0 +1,13 @@
+# Modelos locales (requieren torch con CUDA ya instalado).
+diffusers>=0.33
+transformers>=4.51
+accelerate>=1.2
+safetensors>=0.4
+sentencepiece>=0.2
+ftfy>=6.2
+protobuf>=4.25
+imageio>=2.34
+imageio-ffmpeg>=0.5
+faster-whisper>=1.1
+kokoro>=0.9.4
+misaki[en]>=0.9.4

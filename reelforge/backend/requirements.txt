@@ -1,0 +1,12 @@
+# Núcleo (servidor, edición, proyectos). PyTorch se instala aparte con CUDA 12.8 (RTX serie 50).
+fastapi>=0.115
+uvicorn>=0.30
+pydantic>=2.7
+python-multipart>=0.0.9
+httpx>=0.27
+numpy>=1.26
+pillow>=10.3
+soundfile>=0.12
+huggingface_hub>=0.25
+edge-tts>=7.0
+google-genai>=1.20

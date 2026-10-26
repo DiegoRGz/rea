@@ -1,0 +1,65 @@
+{
+  "name": "reelforge-studio",
+  "productName": "ReelForge Studio",
+  "version": "1.0.0",
+  "description": "Estudio de IA local para crear reels virales: guion, voz, imágenes, vídeo, subtítulos animados y edición.",
+  "main": "electron/main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "icon": "python scripts/make_icon.py",
+    "dist": "electron-builder --win nsis portable",
+    "dist:dir": "electron-builder --win dir"
+  },
+  "devDependencies": {
+    "electron": "44.2.0",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "studio.reelforge.app",
+    "productName": "ReelForge Studio",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!tests/**",
+          "!.venv/**",
+          "!.pytest_cache/**"
+        ]
+      },
+      {
+        "from": "ui",
+        "to": "ui"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ReelForge Studio"
+    },
+    "portable": {
+      "artifactName": "ReelForgeStudio-${version}-portable.exe"
+    }
+  }
+}
