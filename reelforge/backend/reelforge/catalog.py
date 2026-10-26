@@ -199,7 +199,8 @@ EXTRAS = {
     "xtts": {"name": "Clonación de voz XTTS-v2", "packages": ["coqui-tts>=0.24"], "module": "TTS",
              "note": "Licencia CPML (no comercial). ~2 GB adicionales al primer uso."},
     "ai": {"name": "Paquete de IA local completo", "packages": ["-r", str(config.BACKEND_DIR / "requirements-ai.txt")],
-           "module": "diffusers", "note": "diffusers, transformers, faster-whisper, kokoro…"},
+           "module": "diffusers", "check": lambda: gpu.has_module("diffusers") and gpu.has_module("cv2"),
+           "note": "diffusers, transformers, faster-whisper, kokoro, OpenCV (seguimiento facial de Clips)…"},
 }
 
 
