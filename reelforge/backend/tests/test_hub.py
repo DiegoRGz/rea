@@ -58,7 +58,7 @@ def test_added_model_generates_through_generic_loader(monkeypatch):
             callback_on_step_end(self, 0, 0, {})
             return SimpleNamespace(images=[Image.new("RGB", (width // 8, height // 8), "purple")])
 
-    monkeypatch.setattr(hub.gpu, "acquire", lambda key, loader: FakePipe())
+    monkeypatch.setattr(hub.gpu, "acquire", lambda key, loader, *a: FakePipe())
     ctx = JobContext(Job(id="h", kind="image", title="t", lane="gpu"))
     items = image.generate(ctx, "a neon city", "hf:org/cool-image", "9:16", 1, 7, "none", steps=6)
     assert items[0]["kind"] == "image"
