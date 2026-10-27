@@ -85,3 +85,18 @@ def test_reset_keeps_user_panoramas(runtime):
     runtime.reset()
     assert runtime.needs_first_install("cpu")
     assert (runtime.home / "salidas" / "mia.jpg").exists()
+
+
+def test_environment_uses_the_bundled_python_when_present(tmp_path, monkeypatch):
+    import runtime as runtime_module
+
+    bundle = tmp_path / "bundle"
+    (bundle / "python" / "bin").mkdir(parents=True)
+    (bundle / "python" / "bin" / "python3").symlink_to(sys.executable)
+    monkeypatch.setattr(runtime_module, "bundle_dir", lambda: bundle)
+    rt = Runtime(base=tmp_path / "base", home=tmp_path / "home", uv=_fake_uv(tmp_path))
+    rt.install("cpu")
+    log = (rt.logs_dir / "instalacion.log").read_text()
+    venv_line = next(line for line in log.splitlines() if " venv " in line)
+    assert str(bundle / "python" / "bin" / "python3") in venv_line
+    assert "only-managed" not in venv_line  # sin descarga de Python ni junctions

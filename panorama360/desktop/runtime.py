@@ -47,6 +47,18 @@ def bundle_dir() -> Path:
     return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 
 
+def bundled_python() -> Path | None:
+    """Python incluido en el instalador de Windows.
+
+    Evita que uv descargue su propio Python: al hacerlo crea un *junction* de carpeta
+    que algunas instalaciones de Windows 11 bloquean (error 448, "punto de montaje no
+    confiable"). Con un intérprete explícito, ``uv venv`` no crea ningún enlace.
+    """
+    folder = bundle_dir() / "python"
+    candidate = folder / "python.exe" if sys.platform == "win32" else folder / "bin" / "python3"
+    return candidate if candidate.exists() else None
+
+
 def default_base() -> Path:
     if override := os.environ.get("PANORAMA360_INSTALL_DIR"):
         return Path(override)
@@ -317,8 +329,24 @@ class Runtime:
 
     def _step_python(self, variant: str, span) -> None:
         shutil.rmtree(self.env_dir, ignore_errors=True)
-        self._run([self.uv, "venv", "--python", PYTHON_VERSION, "--python-preference", "only-managed",
-                   str(self.env_dir)], span, "Descargando Python " + PYTHON_VERSION)
+        interpreter = bundled_python()
+        if interpreter is not None:
+            self._run([self.uv, "venv", "--python", str(interpreter), str(self.env_dir)], span,
+                      "Creando el entorno de Python")
+        else:  # desarrollo fuera del instalador
+            self._run([self.uv, "venv", "--python", PYTHON_VERSION, "--python-preference", "only-managed",
+                       str(self.env_dir)], span, "Descargando Python " + PYTHON_VERSION)
+
+    def env_python_home(self) -> str:
+        """Intérprete base del entorno (línea ``home`` de pyvenv.cfg)."""
+        try:
+            for line in (self.env_dir / "pyvenv.cfg").read_text(encoding="utf-8").splitlines():
+                key, _, value = line.partition("=")
+                if key.strip() == "home":
+                    return value.strip()
+        except OSError:
+            pass
+        return ""
 
     def _step_torch(self, variant: str, span) -> None:
         args = [self.uv, "pip", "install", "--python", str(self.env_python()), "torch", "torchvision"]

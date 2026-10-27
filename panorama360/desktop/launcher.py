@@ -152,6 +152,7 @@ def self_test(runtime: Runtime, variant: str | None, report: Path) -> int:
             body = response.read().decode("utf-8", errors="replace")
         result.update(ok=response.status == 200 and "gradio" in body.lower(), url=url, status=response.status)
         result["pending_after"] = runtime.pending_steps(variant)
+        result["python_home"] = runtime.env_python_home()
     except Exception as exc:
         result["error"] = f"{type(exc).__name__}: {exc}"
     finally:

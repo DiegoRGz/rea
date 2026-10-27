@@ -26,6 +26,19 @@ Copy-Item -Recurse config, panorama360 -Destination $src
 Get-ChildItem -Path $src -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
 Copy-Item "$build\venv-build\Scripts\uv.exe" "$build\uv.exe" -Force
 
+Write-Host "== Python incluido (sin junctions: Windows 11 puede bloquearlos con el error 448)"
+$pyInstall = "$build\pyinstall"
+& "$build\uv.exe" python install 3.12 --install-dir $pyInstall
+if ($LASTEXITCODE -ne 0) { throw "uv python install fallo" }
+$pyDir = Get-ChildItem $pyInstall -Directory | Where-Object {
+  $_.Name -match '^cpython-3\.12\.\d+-windows-x86_64' -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)
+} | Select-Object -First 1
+if (-not $pyDir) { throw "No se encontro la carpeta real de Python en $pyInstall" }
+if (Test-Path "$build\python") { Remove-Item -Recurse -Force "$build\python" }
+Copy-Item -Recurse $pyDir.FullName "$build\python"
+& "$build\python\python.exe" -c "import sys, venv; print(sys.version)"
+if ($LASTEXITCODE -ne 0) { throw "El Python incluido no funciona" }
+
 Write-Host "== Informacion de version del .exe"
 $parts = ($Version.Split(".") + @("0", "0", "0", "0"))[0..3] -join ", "
 @"
@@ -48,7 +61,7 @@ Write-Host "== PyInstaller"
 & $py -m PyInstaller --noconfirm --clean --windowed --onedir --name Panorama360 `
   --icon "$build\assets\icon.ico" --version-file "$build\version_info.txt" `
   --distpath "$build\dist" --workpath "$build\work" --specpath "$build" `
-  --add-data "$root\desktop\splash.html;." --add-data "$src;app_src" --add-binary "$build\uv.exe;." `
+  --add-data "$root\desktop\splash.html;." --add-data "$src;app_src" --add-binary "$build\uv.exe;." --add-data "$build\python;python" `
   --paths "$root\desktop" desktop\launcher.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller fallo" }
 

@@ -48,6 +48,13 @@ jobs:
           $run = Start-Process "$env:RUNNER_TEMP\p360-app\Panorama360.exe" -ArgumentList '--self-test', $report, '--variante', 'cpu' -Wait -PassThru
           Get-Content $report
           if ($run.ExitCode -ne 0) { throw "Self-test failed with exit code $($run.ExitCode)" }
+          # The environment must come from the Python shipped in the installer, never a uv-managed
+          # download (its minor-version junction fails with os error 448 on some Windows 11 setups).
+          $pyHome = (Get-Content $report | ConvertFrom-Json).python_home
+          if (-not $pyHome.StartsWith("$env:RUNNER_TEMP\p360-app", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Environment was not created from the bundled Python: '$pyHome'"
+          }
+          if (Test-Path "$env:PANORAMA360_INSTALL_DIR\python") { throw "uv downloaded a managed Python" }
 
       - name: Unit tests inside the installed environment
         env:
