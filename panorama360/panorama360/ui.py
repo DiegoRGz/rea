@@ -44,7 +44,18 @@ CSS = """
 .pano-progress {border-radius: 10px; padding: 10px 12px; background: var(--block-background-fill);
   border: 1px solid var(--border-color-primary)}
 .pano-bar {height: 8px; border-radius: 4px; background: var(--border-color-primary); overflow: hidden; margin-top: 6px}
-.pano-bar > div {height: 100%; background: var(--color-accent); transition: width .4s}
+.pano-bar > div {position: relative; height: 100%; background: linear-gradient(90deg, var(--color-accent), #22d3ee)}
+.pano-bar > div::after {content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); animation: pano-shimmer 1.5s linear infinite}
+.pano-live {display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%;
+  background: var(--color-accent); animation: pano-pulse 1.5s ease-in-out infinite}
+.pano-results img {animation: pano-fade .6s ease both}
+button.primary {transition: transform .15s, box-shadow .2s}
+button.primary:hover {transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16,185,129,.35)}
+@keyframes pano-shimmer {from {transform: translateX(-100%)} to {transform: translateX(100%)}}
+@keyframes pano-pulse {0%, 100% {opacity: .35; transform: scale(.8)} 50% {opacity: 1; transform: scale(1.1)}}
+@keyframes pano-fade {from {opacity: 0; transform: scale(.97)}}
+@media (prefers-reduced-motion: reduce) {.pano-bar > div::after, .pano-live, .pano-results img {animation: none}}
 .pano-link a {display: inline-block; padding: 8px 14px; border-radius: 8px; background: var(--color-accent);
   color: white !important; text-decoration: none; font-weight: 600}
 footer {display: none !important}
@@ -148,7 +159,7 @@ class App:
         model = self.catalog.models.get(req["model_key"])
         title = html.escape((current.sample_name and f"Muestra: {current.sample_name}") or req["prompt"][:90])
         return (
-            f'<div class="pano-progress"><b>{title}</b> · {html.escape(model.name if model else req["model_key"])} '
+            f'<div class="pano-progress"><span class="pano-live"></span><b>{title}</b> · {html.escape(model.name if model else req["model_key"])} '
             f'· {current.index}/{current.total} del lote · {pending} pendiente(s){paused}<br>'
             f'<small>{html.escape(current.message)}</small>'
             f'<div class="pano-bar"><div style="width:{current.progress * 100:.0f}%"></div></div></div>'
@@ -295,9 +306,10 @@ def build(app: App) -> gr.Blocks:
                             value=app.queue_rows(), interactive=False, wrap=True, max_height=260,
                         )
                         results = gr.Gallery(label="Resultados recientes", columns=3, height=420, object_fit="cover",
-                                             allow_preview=True)
+                                             allow_preview=True, elem_classes=["pano-results"])
                         with gr.Row():
                             viewer_link = gr.HTML()
+                            open_folder = gr.Button("📂 Abrir carpeta de panorámicas", size="sm")
                             download = gr.File(label="Descargar (JPEG 360° con metadatos para Facebook)", height=70)
                         selection_info = gr.Markdown()
 
@@ -463,6 +475,7 @@ def build(app: App) -> gr.Blocks:
             return "✅ Memoria liberada."
 
         unload_btn.click(unload, None, system_status)
+        open_folder.click(lambda: _open_folder(OUTPUT_DIR))
 
         def initial(key):
             items, paths = app.recent_results()
@@ -474,6 +487,19 @@ def build(app: App) -> gr.Blocks:
         demo.load(initial, model, [results, results_paths, samples, samples_paths, compare_gallery, compare_paths,
                                    gallery, gallery_paths, version])
     return demo
+
+
+def _open_folder(folder: Path) -> None:
+    """Abre la carpeta en el explorador del sistema (el servidor corre en este mismo equipo)."""
+    import os
+    import subprocess
+    import sys
+
+    folder.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        os.startfile(folder)  # noqa: S606
+    else:
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(folder)])
 
 
 def _gallery(app: App):

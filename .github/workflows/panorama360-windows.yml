@@ -1,0 +1,80 @@
+name: Panorama 360 Windows installer
+
+on:
+  push:
+    branches: [claude/eager-einstein-huaxay]
+    paths:
+      - "panorama360/**"
+      - ".github/workflows/panorama360-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: panorama360-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and smoke-test Panorama360-Setup.exe
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: panorama360
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Build executable and installer
+        run: ./desktop/build_windows.ps1 -Version "1.0.${{ github.run_number }}"
+
+      - name: Install silently
+        run: |
+          $setup = Start-Process build\output\Panorama360-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$env:RUNNER_TEMP\p360-app" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Setup exit code $($setup.ExitCode)" }
+          if (-not (Test-Path "$env:RUNNER_TEMP\p360-app\Panorama360.exe")) { throw "Panorama360.exe was not installed" }
+
+      - name: Self-test installed exe (CPU environment, server start)
+        env:
+          PANORAMA360_INSTALL_DIR: ${{ runner.temp }}\p360-runtime
+          PANORAMA360_HOME: ${{ runner.temp }}\p360-home
+        run: |
+          $report = "$env:RUNNER_TEMP\selftest.json"
+          $run = Start-Process "$env:RUNNER_TEMP\p360-app\Panorama360.exe" -ArgumentList '--self-test', $report, '--variante', 'cpu' -Wait -PassThru
+          Get-Content $report
+          if ($run.ExitCode -ne 0) { throw "Self-test failed with exit code $($run.ExitCode)" }
+
+      - name: Unit tests inside the installed environment
+        env:
+          PANORAMA360_HOME: ${{ runner.temp }}\p360-test-home
+        run: |
+          $python = "$env:RUNNER_TEMP\p360-runtime\env\Scripts\python.exe"
+          & build\uv.exe pip install --python $python pytest
+          if ($LASTEXITCODE -ne 0) { throw "pytest install failed" }
+          & $python -m pytest -q tests -p no:cacheprovider
+          if ($LASTEXITCODE -ne 0) { throw "tests failed" }
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Panorama360-Setup
+          path: panorama360/build/output/Panorama360-Setup.exe
+          if-no-files-found: error
+
+      - name: Collect logs
+        if: failure()
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\p360-logs" | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\selftest.json" "$env:RUNNER_TEMP\p360-logs" -ErrorAction SilentlyContinue
+          Copy-Item -Recurse "$env:RUNNER_TEMP\p360-runtime\logs\*" "$env:RUNNER_TEMP\p360-logs" -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: Panorama360-logs
+          path: ${{ runner.temp }}/p360-logs
+          if-no-files-found: ignore

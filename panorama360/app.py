@@ -4,8 +4,32 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+import sys
 import threading
 import webbrowser
+from pathlib import Path
+
+ALREADY_RUNNING_EXIT = 3
+
+
+def acquire_instance_lock(path: Path):
+    """Evita dos servidores a la vez: compartirían la cola y repetirían trabajos."""
+    handle = open(path, "a+")  # noqa: SIM115 - se mantiene abierto mientras viva el proceso
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
 
 
 def main() -> None:
@@ -16,6 +40,12 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    from panorama360.paths import DATA_DIR
+
+    lock = acquire_instance_lock(DATA_DIR / ".instancia.lock")
+    if lock is None:
+        print("Panorama 360° ya está abierto en otra ventana.")
+        sys.exit(ALREADY_RUNNING_EXIT)
     print("Cargando Panorama 360°…")
     import uvicorn
 

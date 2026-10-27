@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panorama 360°</title>
+<style>
+  :root {
+    --bg-1: #0b1020; --bg-2: #141a3a; --ink: #eef2ff; --muted: #a5b4cf; --line: rgba(255,255,255,.12);
+    --accent: #10b981; --accent-2: #22d3ee; --danger: #f87171; --card: rgba(255,255,255,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--ink); background: radial-gradient(1200px 700px at 30% 20%, #1b2463 0%, transparent 60%),
+      radial-gradient(900px 600px at 80% 90%, #053f3a 0%, transparent 60%), linear-gradient(160deg, var(--bg-2), var(--bg-1));
+    display: grid; place-items: center; user-select: none;
+  }
+
+  /* Estrellas */
+  .stars, .stars::after { position: fixed; inset: 0; pointer-events: none;
+    background-image: radial-gradient(1px 1px at 10% 20%, #fff8, transparent), radial-gradient(1px 1px at 70% 30%, #fff9, transparent),
+      radial-gradient(1.5px 1.5px at 40% 80%, #fffa, transparent), radial-gradient(1px 1px at 85% 65%, #fff7, transparent),
+      radial-gradient(1px 1px at 25% 55%, #fff6, transparent), radial-gradient(1.5px 1.5px at 60% 12%, #fff9, transparent),
+      radial-gradient(1px 1px at 92% 18%, #fff8, transparent), radial-gradient(1px 1px at 5% 85%, #fff7, transparent);
+    animation: twinkle 6s ease-in-out infinite alternate; }
+  .stars::after { content: ""; transform: translate(13%, 37%) scale(1.3); animation-delay: -3s; }
+  @keyframes twinkle { from { opacity: .35 } to { opacity: 1 } }
+
+  main { position: relative; width: min(560px, calc(100vw - 32px)); text-align: center; }
+
+  /* Globo giratorio */
+  .scene { position: relative; width: 220px; height: 220px; margin: 0 auto 18px; }
+  .globe {
+    position: absolute; inset: 30px; border-radius: 50%; overflow: hidden;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,.55) 0 1.5px, transparent 1.5px 26px),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.35) 0 1.5px, transparent 1.5px 26px),
+      linear-gradient(135deg, #5eead4, #2563eb 70%);
+    background-size: 156px 100%, 100% 100%, 100% 100%;
+    animation: spin 9s linear infinite;
+    box-shadow: 0 0 60px rgba(34,211,238,.45), inset -26px -20px 50px rgba(3,7,30,.75), inset 14px 10px 30px rgba(255,255,255,.35);
+  }
+  .globe::after { content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, rgba(255,255,255,.55), transparent 35%); }
+  @keyframes spin { to { background-position: 156px 0, 0 0, 0 0; } }
+  .scene { transform-style: preserve-3d; }
+  .orbit { position: absolute; inset: 0; transform: rotate(-18deg); transform-style: preserve-3d; }
+  .plane { position: absolute; inset: 2px; transform: rotateX(74deg); transform-style: preserve-3d; }
+  .ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid rgba(255,255,255,.85);
+    box-shadow: 0 0 12px rgba(34,211,238,.8), inset 0 0 12px rgba(34,211,238,.5); }
+  .spinner { position: absolute; inset: 0; animation: rot 3.2s linear infinite; }
+  .spinner::before { content: ""; position: absolute; left: 50%; top: -9px; width: 16px; height: 16px; margin-left: -8px;
+    border-radius: 50%; background: #fff; box-shadow: 0 0 16px 6px var(--accent-2); }
+
+  h1 { margin: 0; font-size: 34px; letter-spacing: .5px; font-weight: 700;
+    background: linear-gradient(90deg, #fff, #a7f3d0, #67e8f9, #fff); background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent; animation: sheen 6s linear infinite; }
+  @keyframes sheen { to { background-position: 300% 0; } }
+  .subtitle { margin: 6px 0 22px; color: var(--muted); font-size: 14px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; text-align: left;
+    backdrop-filter: blur(10px); animation: rise .45s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px) scale(.98); } }
+  .card h2 { margin: 0 0 10px; font-size: 17px; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13.5px; color: var(--muted); margin: 0 0 16px; }
+  .facts b { color: var(--ink); font-weight: 600; word-break: break-all; }
+
+  .steps { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+  .steps li { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--muted); transition: color .3s; }
+  .steps li.running { color: var(--ink); }
+  .steps li.done { color: #a7f3d0; }
+  .mark { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-items: center;
+    font-size: 13px; transition: all .3s; }
+  .running .mark { border-color: var(--accent-2); border-right-color: transparent; animation: rot 0.8s linear infinite; }
+  .done .mark { background: var(--accent); border-color: var(--accent); animation: pop .35s ease-out; }
+  .done .mark::after { content: "✓"; color: #04291f; font-weight: 800; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  @keyframes pop { 0% { transform: scale(.4); } 70% { transform: scale(1.15); } }
+
+  .bar { position: relative; height: 10px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .bar > div { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .6s ease; }
+  .bar > div::after { content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent); animation: shimmer 1.6s infinite; }
+  .bar.indeterminate > div { width: 35% !important; animation: slide 1.4s ease-in-out infinite; }
+  @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  @keyframes slide { from { left: -35%; } to { left: 100%; } }
+  .meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12.5px; color: var(--muted); gap: 12px; }
+  .log { margin-top: 10px; font: 11.5px/1.4 Consolas, "Cascadia Mono", monospace; color: #7c8db5; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; min-height: 16px; }
+
+  .buttons { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 16px; }
+  button { font: inherit; font-size: 14px; border-radius: 10px; padding: 10px 18px; cursor: pointer; border: 1px solid var(--line);
+    color: var(--ink); background: rgba(255,255,255,.06); transition: transform .15s, background .2s, box-shadow .2s; }
+  button:hover { background: rgba(255,255,255,.12); transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  button.primary { border: none; color: #04291f; font-weight: 700; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    box-shadow: 0 6px 24px rgba(16,185,129,.35); }
+  button.primary:hover { box-shadow: 0 8px 30px rgba(34,211,238,.45); }
+
+  .error h2 { color: var(--danger); }
+  pre { margin: 0; max-height: 170px; overflow: auto; white-space: pre-wrap; font: 12px/1.45 Consolas, monospace;
+    color: #fecaca; background: rgba(0,0,0,.25); border-radius: 10px; padding: 10px 12px; user-select: text; }
+
+  .loading { display: flex; justify-content: center; gap: 8px; margin: 6px 0 14px; }
+  .loading span { width: 9px; height: 9px; border-radius: 50%; background: var(--accent-2); animation: bounce 1s infinite ease-in-out; }
+  .loading span:nth-child(2) { animation-delay: .15s; } .loading span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce { 0%, 80%, 100% { transform: scale(.5); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
+  .tip { min-height: 40px; color: var(--muted); font-size: 13.5px; text-align: center; transition: opacity .5s; }
+
+  body.leaving main { animation: leave .6s ease forwards; }
+  @keyframes leave { to { opacity: 0; transform: scale(1.06); filter: blur(4px); } }
+
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<main>
+  <div class="scene" aria-hidden="true">
+    <div class="globe"></div>
+    <div class="orbit"><div class="plane"><div class="ring"></div><div class="spinner"></div></div></div>
+  </div>
+  <h1>Panorama 360°</h1>
+  <p class="subtitle">Panorámicas 360° con IA, en tu propio equipo</p>
+
+  <section id="checking" class="card" style="text-align:center">
+    <div class="loading"><span></span><span></span><span></span></div>
+    <div class="tip">Comprobando tu equipo…</div>
+  </section>
+
+  <section id="welcome" class="card" hidden>
+    <h2>Primera instalación</h2>
+    <p style="margin:0 0 14px;color:var(--muted);font-size:13.5px">
+      Panorama 360 va a descargar su motor de IA. Solo pasa una vez; después abre en segundos.</p>
+    <div class="facts">
+      <span>Tu equipo</span><b id="w-gpu">—</b>
+      <span>Se instalará</span><b id="w-variant">—</b>
+      <span>Espacio</span><b>~6 GB ahora · ~7 GB por cada modelo al usarlo</b>
+      <span>Programa</span><b id="w-dir">—</b>
+      <span>Tus panorámicas</span><b id="w-home">—</b>
+    </div>
+    <div class="buttons">
+      <button onclick="call('quit')">Salir</button>
+      <button class="primary" onclick="call('install')">Instalar ahora</button>
+    </div>
+  </section>
+
+  <section id="installing" class="card" hidden>
+    <h2>Instalando…</h2>
+    <ul class="steps" id="steps"></ul>
+    <div class="bar" id="bar"><div></div></div>
+    <div class="meta"><span id="detail">Preparando…</span><span id="percent">0%</span></div>
+    <div class="log" id="log"></div>
+    <div class="buttons"><button onclick="call('cancel')">Cancelar</button></div>
+  </section>
+
+  <section id="starting" class="card" style="text-align:center" hidden>
+    <div class="loading"><span></span><span></span><span></span></div>
+    <div style="font-weight:600;margin-bottom:8px">Encendiendo el motor…</div>
+    <div class="tip" id="tip"></div>
+  </section>
+
+  <section id="busy" class="card" style="text-align:center" hidden>
+    <h2>Panorama 360 ya está abierto</h2>
+    <p style="color:var(--muted);font-size:14px">Usa la ventana que ya tienes abierta.</p>
+    <div class="buttons" style="justify-content:center"><button class="primary" onclick="call('quit')">Entendido</button></div>
+  </section>
+
+  <section id="error" class="card error" hidden>
+    <h2>Algo salió mal</h2>
+    <pre id="error-text"></pre>
+    <div class="buttons">
+      <button onclick="call('open_logs')">Ver registros</button>
+      <button onclick="call('repair')">Reparar instalación</button>
+      <button class="primary" onclick="call('retry')">Reintentar</button>
+    </div>
+  </section>
+</main>
+<script>
+  const TIPS = [
+    "Describe el entorno completo: suelo, horizonte y cielo.",
+    "En inglés los modelos entienden mejor la escena.",
+    "Prueba varios modelos en «Comparar modelos» con la misma semilla.",
+    "Usa una imagen de referencia para mantener el mismo estilo en todo un lote.",
+    "Sube el JPEG tal cual a Facebook: ya incluye los metadatos 360°.",
+  ];
+  const VARIANTS = { cuda: "PyTorch con CUDA (GPU NVIDIA)", cpu: "PyTorch para CPU (más lento)", mac: "PyTorch con Metal (Apple)" };
+  let tipIndex = 0, leaving = false;
+
+  function call(name) { if (window.pywebview) window.pywebview.api[name](); }
+  function show(id) { for (const s of document.querySelectorAll("main > section")) s.hidden = s.id !== id; }
+  function text(id, value) { const el = document.getElementById(id); if (el.textContent !== value) el.textContent = value; }
+
+  function render(state) {
+    if (state.phase === "ready") {
+      if (!leaving) { leaving = true; document.body.classList.add("leaving"); }
+      return;
+    }
+    show(state.phase);
+    const gpu = state.gpu || {};
+    text("w-gpu", gpu.name ? gpu.name + (gpu.vram_gb ? ` · ${gpu.vram_gb} GB` : "") : "—");
+    text("w-variant", VARIANTS[state.variant] || "—");
+    text("w-dir", state.install_dir || "—");
+    text("w-home", state.home_dir || "—");
+    if (state.phase === "installing") {
+      const list = document.getElementById("steps");
+      const html = state.steps.map(s => `<li class="${s.status}"><span class="mark"></span>${s.label}</li>`).join("");
+      if (list.dataset.html !== html) { list.innerHTML = html; list.dataset.html = html; }
+      const pct = Math.round(state.progress * 100);
+      document.querySelector("#bar > div").style.width = pct + "%";
+      text("percent", pct + "%");
+      text("detail", state.detail || "");
+      text("log", state.log || "");
+    }
+    if (state.phase === "error") text("error-text", state.error || "Error desconocido");
+  }
+
+  async function poll() {
+    try { render(await window.pywebview.api.state()); } catch (e) { /* la ventana se está cerrando */ }
+    setTimeout(poll, 300);
+  }
+  function rotateTip() {
+    const tip = document.getElementById("tip");
+    tip.style.opacity = 0;
+    setTimeout(() => { tip.textContent = TIPS[tipIndex++ % TIPS.length]; tip.style.opacity = 1; }, 450);
+  }
+  rotateTip(); setInterval(rotateTip, 4500);
+  window.addEventListener("pywebviewready", poll);
+</script>
+</body>
+</html>

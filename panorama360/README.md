@@ -32,7 +32,23 @@ Sin GPU también funciona, pero cada panorámica puede tardar mucho.
 
 ## Instalación
 
-**Windows**
+**Windows: instalador `.exe` (recomendado)**
+
+1. Descarga **`Panorama360-Setup.exe`** (ver abajo de dónde sale) y ejecútalo. No pide permisos de
+   administrador; crea accesos directos en el escritorio y en el menú Inicio.
+2. Abre **Panorama 360**. La primera vez muestra qué va a instalar (Python y PyTorch para tu GPU,
+   ~6 GB) y espera a que pulses *Instalar ahora*; verás el progreso animado. Después la app abre en
+   su propia ventana en segundos.
+3. Tus panorámicas quedan en `Imágenes\Panorama360\salidas`. Al desinstalar se borra el motor
+   (`%LOCALAPPDATA%\Panorama360`) pero se conservan tus panorámicas.
+
+El instalador lo compila GitHub Actions en Windows (`.github/workflows/panorama360-windows.yml`)
+en cada cambio de `panorama360/`: en la ejecución, sección *Artifacts* → **Panorama360-Setup**.
+También puedes compilarlo tú en Windows con `.\desktop\build_windows.ps1`.
+Como no está firmado digitalmente, Windows SmartScreen puede avisar: *Más información →
+Ejecutar de todas formas*.
+
+**Windows: scripts `.bat` (alternativa sin instalador)**
 
 1. Instala [Python 3.12](https://www.python.org/downloads/) marcando *Add python.exe to PATH*.
 2. Actualiza el driver de tu tarjeta NVIDIA.
