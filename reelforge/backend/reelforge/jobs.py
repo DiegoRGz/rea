@@ -90,9 +90,14 @@ class heartbeat:
                  detail: Callable[[], str | None] | None = None, expected: float = 90.0):
         self.job: Job | None = getattr(ctx, "job", None)
         self.message, self.detail, self.expected = message, detail, expected
+        self.prefix = getattr(ctx, "prefix", "")
+        # start/end son relativos al contexto: un subcontexto (p. ej. una escena) los mapea a su tramo.
+        lo, hi = getattr(ctx, "start", None), getattr(ctx, "end", None)
+        to_abs = (lambda v: v) if lo is None or hi is None else (lambda v: lo + (hi - lo) * v)
         base = self.job.progress if self.job else 0.0
-        self.start = base if start is None else start
-        self.end = min(0.95, self.start + 0.1) if end is None else end
+        self.start = base if start is None else to_abs(start)
+        limit = 0.95 if hi is None else hi
+        self.end = min(limit, self.start + 0.1) if end is None else to_abs(end)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -112,12 +117,12 @@ class heartbeat:
                     extra = self.detail()
                 except Exception:  # noqa: BLE001
                     extra = None
-            self.job.message = f"{self.message} · {int(elapsed)} s" + (f" · {extra}" if extra else "")
+            self.job.message = f"{self.prefix}{self.message} · {int(elapsed)} s" + (f" · {extra}" if extra else "")
 
     def __enter__(self) -> "heartbeat":
         if self.job:
             self.job.progress = self.start
-            self.job.message = self.message
+            self.job.message = self.prefix + self.message
             self._thread = threading.Thread(target=self._run, daemon=True)
             self._thread.start()
         return self

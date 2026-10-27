@@ -132,6 +132,28 @@ def download_meter() -> Callable[[], str | None]:
     return detail
 
 
+_cuda_configured = False
+
+
+def configure_cuda_memory() -> None:
+    """Limita PyTorch a ~93 % de la VRAM dedicada.
+
+    En Windows, cuando la VRAM se llena, el driver de NVIDIA desborda en silencio a la
+    memoria compartida (RAM por PCIe) y todo va decenas de veces más lento sin dar error.
+    Con este tope PyTorch lanza OutOfMemory y la app cambia a un plan de memoria adecuado."""
+    global _cuda_configured
+    if _cuda_configured:
+        return
+    _cuda_configured = True
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.set_per_process_memory_fraction(0.93)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def acquire(key: str, loader: Callable[[], Any], ctx: Any = None, label: str = "Cargando modelo") -> Any:
     """Devuelve el modelo `key`, descargando de la VRAM el anterior si es distinto.
 
@@ -140,6 +162,7 @@ def acquire(key: str, loader: Callable[[], Any], ctx: Any = None, label: str = "
         if _slot["key"] == key and _slot["model"] is not None:
             return _slot["model"]
         release()
+        configure_cuda_memory()
         if ctx is not None:
             from .jobs import heartbeat
 

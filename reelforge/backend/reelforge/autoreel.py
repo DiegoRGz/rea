@@ -41,7 +41,7 @@ class AutoReelRequest(BaseModel):
     voice: str = "ef_dora"
     speed: float = 1.05
     lang: str = "es"
-    visual_mode: str = "image"  # image | video | google-image | google-video | library
+    visual_mode: str = "image"  # image | hybrid | video | google-image | google-video | library
     image_model: str = "flux2-klein"
     image_style: str = "cinematic"
     video_model: str = "wan2.1-1.3b"
@@ -67,12 +67,15 @@ MOTIONS = ["zoom_in", "pan_right", "zoom_out", "pan_left", "pan_up", "zoom_in", 
 class _Sub(JobContext):
     """Contexto que mapea el progreso de un subpaso a un tramo del total."""
 
-    def __init__(self, parent: JobContext, start: float, end: float):
+    def __init__(self, parent: JobContext, start: float, end: float, prefix: str = ""):
         super().__init__(parent.job)
         self.start, self.end = start, end
+        self.prefix = getattr(parent, "prefix", "") + prefix
 
     def progress(self, value: float | None = None, message: str | None = None) -> None:
         mapped = None if value is None else self.start + (self.end - self.start) * max(0.0, min(1.0, value))
+        if message and self.prefix and not message.startswith(self.prefix):
+            message = self.prefix + message
         super().progress(mapped, message)
 
 
@@ -114,14 +117,17 @@ def build(ctx: JobContext, req: AutoReelRequest) -> dict:
     # 2) Visuales -------------------------------------------------------------
     media_ids: list[str] = []
     for i, sc in enumerate(scenes):
-        sub = _Sub(ctx, 0.2 + 0.55 * i / n, 0.2 + 0.55 * (i + 1) / n)
+        sub = _Sub(ctx, 0.2 + 0.55 * i / n, 0.2 + 0.55 * (i + 1) / n, f"Escena {i + 1}/{n} · ")
         if sc.media_id and get_media(sc.media_id):
             media_ids.append(sc.media_id)
             continue
         prompt = sc.visual or sc.narration
-        sub.progress(0, f"Visual escena {i + 1}/{n}")
-        if req.visual_mode == "video":
-            media_ids.append(video.generate(sub, prompt, req.video_model, seconds=min(5.0, durations[i]))["id"])
+        sub.progress(0, "Preparando el visual…")
+        if req.visual_mode == "video" or (req.visual_mode == "hybrid" and i == 0):
+            # Clips de hasta 3,5 s: si la escena dura más, el clip se ralentiza suavemente para cubrirla.
+            media_ids.append(video.generate(sub, prompt, req.video_model, seconds=min(3.5, durations[i]))["id"])
+        elif req.visual_mode == "hybrid":
+            media_ids.append(image.generate(sub, prompt, req.image_model, "9:16", 1, None, req.image_style)[0]["id"])
         elif req.visual_mode == "google-video":
             media_ids.append(google.generate_video(sub, prompt)["id"])
         elif req.visual_mode == "google-image":

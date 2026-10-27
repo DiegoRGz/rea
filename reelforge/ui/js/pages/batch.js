@@ -66,7 +66,7 @@ export async function render(view) {
         h("div", { class: "grid g2" },
           field("Motor de voz", select(state.meta.tts.engines.map((e) => [e.id, e.name]), o.tts_engine, (v) => { o.tts_engine = v; o.voice = (state.meta.tts.voices[v] || [])[0]?.id; drawVoices(); })),
           field("Voz", voices)),
-        field("Visuales", select([["image", "Imágenes IA (local)"], ["google-image", "Google Imagen"], ["google-video", "Google vídeo (Omni/Veo)"], ["video", "Vídeo IA local (muy lento)"]], o.visual_mode, (v) => (o.visual_mode = v))),
+        field("Visuales", select([["image", "Imágenes IA (local)"], ["hybrid", "Híbrido: vídeo IA en el gancho"], ["google-image", "Google Imagen"], ["google-video", "Google vídeo (Omni/Veo)"], ["video", "Vídeo IA local (muy lento)"]], o.visual_mode, (v) => (o.visual_mode = v))),
         field("Modelo de imagen", select(Object.entries(state.meta.image.models).map(([k, v]) => [k, v.name]), o.image_model, (v) => (o.image_model = v))),
         field("Música", music),
         h("div", { class: "toggle-row" }, h("span", {}, "Edición viral automática"), toggle(o.auto_edit, (v) => (o.auto_edit = v))),

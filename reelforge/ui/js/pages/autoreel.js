@@ -189,8 +189,9 @@ function stepVoice(body, show) {
 
 function stepVisuals(body, show) {
   const modes = [
-    ["image", "image", "Imágenes IA (local)", "SDXL en tu GPU. Rápido: ~5-15 s por escena. Con zoom/paneo animado."],
-    ["video", "video", "Vídeo IA (local)", "Wan 2.1 en tu GPU. Muy lento en 8 GB (varios minutos por escena)."],
+    ["image", "image", "Imágenes IA (local)", "La opción más rápida (~10-30 s por escena) con zoom/paneo animado. Recomendado."],
+    ["hybrid", "sparkles", "Híbrido", "Vídeo IA sólo en el gancho y fotos animadas en el resto. ~5-10 min en total."],
+    ["video", "video", "Vídeo IA (local)", "Wan 2.1 en cada escena. En 8 GB, ~5-10 min por escena: un reel de 30 s puede tardar ~1 h."],
     ["google-image", "cloud", "Google Imagen", "Requiere clave de API de Google AI Studio."],
     ["google-video", "cloud", "Google vídeo", "Gemini Omni Flash o Veo (según Ajustes). Requiere clave y tiene coste."],
     ["library", "folder", "Mis archivos", "Asigna tus propias fotos o clips a cada escena."],
@@ -199,7 +200,8 @@ function stepVisuals(body, show) {
   const perScene = h("div", { class: "col" });
   const drawOpts = () => {
     const im = state.meta.image;
-    if (draft.visual_mode === "image") clear(opts, h("div", { class: "grid g2" }, field("Modelo", select(Object.entries(im.models).map(([k, v]) => [k, v.name]), draft.image_model, (v) => (draft.image_model = v))), field("Estilo visual", select(im.styles.map((s) => [s, { none: "Ninguno", cinematic: "Cinemático", photo: "Foto realista", anime: "Anime", "3d": "3D Pixar", comic: "Cómic", neon: "Neón", minimal: "Minimalista" }[s] || s]), draft.image_style, (v) => (draft.image_style = v)))));
+    if (draft.visual_mode === "hybrid") clear(opts, h("div", { class: "grid g2" }, field("Modelo de imagen", select(Object.entries(im.models).map(([k, v]) => [k, v.name]), draft.image_model, (v) => (draft.image_model = v))), field("Modelo de vídeo (gancho)", select(Object.entries(state.meta.video.models).filter(([, v]) => v.mode === "t2v").map(([k, v]) => [k, v.name]), draft.video_model, (v) => (draft.video_model = v)))));
+    else if (draft.visual_mode === "image") clear(opts, h("div", { class: "grid g2" }, field("Modelo", select(Object.entries(im.models).map(([k, v]) => [k, v.name]), draft.image_model, (v) => (draft.image_model = v))), field("Estilo visual", select(im.styles.map((s) => [s, { none: "Ninguno", cinematic: "Cinemático", photo: "Foto realista", anime: "Anime", "3d": "3D Pixar", comic: "Cómic", neon: "Neón", minimal: "Minimalista" }[s] || s]), draft.image_style, (v) => (draft.image_style = v)))));
     else if (draft.visual_mode === "video") clear(opts, field("Modelo", select(Object.entries(state.meta.video.models).filter(([, v]) => v.mode === "t2v").map(([k, v]) => [k, v.name]), draft.video_model, (v) => (draft.video_model = v))));
     else clear(opts);
   };
@@ -215,7 +217,7 @@ function stepVisuals(body, show) {
         select([["", draft.visual_mode === "library" ? "— Elegir archivo —" : "Generar automáticamente"], ...visual.map((v) => [v.id, v.name])], sc.media_id || "", (v) => { sc.media_id = v || null; drawScenes(); }));
     }));
   };
-  const cards = h("div", { class: "grid", style: { gridTemplateColumns: "repeat(5, minmax(0,1fr))" } });
+  const cards = h("div", { class: "grid", style: { gridTemplateColumns: "repeat(3, minmax(0,1fr))" } });
   const drawCards = () => clear(cards, modes.map(([id, ic, name, desc]) => h("div", { class: `option-card ${draft.visual_mode === id ? "on" : ""}`, onclick: () => { draft.visual_mode = id; drawCards(); drawOpts(); drawScenes(); } }, h("span", { class: "oc-icon" }, icon(ic, 20)), h("b", {}, name), h("p", {}, desc))));
   drawCards();
   drawOpts();

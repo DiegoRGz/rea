@@ -113,14 +113,16 @@ def generate(ctx: JobContext, prompt: str, model: str = "wan2.1-1.3b", seconds: 
     holder: _Holder = gpu.acquire(f"video:{model}", lambda: _load(model), ctx, "Cargando modelo de vídeo")
     pipe = holder.pipe
 
-    ctx.progress(0.1, "Codificando el prompt en CPU…")
-    embeds = _encode(holder, prompt, NEGATIVE)
+    from ..jobs import heartbeat
+
+    with heartbeat(ctx, "Codificando el prompt en CPU", 0.08, 0.15, expected=60):
+        embeds = _encode(holder, prompt, NEGATIVE)
     width, height = (832, 480) if landscape else (480, 832)
     fps = cfg["fps"]
     if model == "wan2.1-1.3b":
         frames = int(round(seconds * fps / 4)) * 4 + 1  # Wan: 4k+1
         frames = max(17, min(81, frames))
-        steps = steps or 30
+        steps = steps or 20  # 20 pasos: casi la misma calidad que 30 en un 35 % menos de tiempo
         extra: dict[str, Any] = {"guidance_scale": 5.0}
     else:
         frames = int(round(seconds * fps / 8)) * 8 + 1  # LTX: 8k+1
@@ -133,14 +135,26 @@ def generate(ctx: JobContext, prompt: str, model: str = "wan2.1-1.3b", seconds: 
             raise FileNotFoundError("Imagen no encontrada")
         extra = {"image": load_image(media.path), "guidance_scale": 3.0}
 
+    import time
+
+    t0 = [time.time()]
+
     def on_step(p, step, timestep, kwargs):
         if ctx.cancelled:
             raise JobCancelled()
-        ctx.progress(0.15 + 0.75 * (step + 1) / steps, f"Generando vídeo · paso {step + 1}/{steps}")
+        done = step + 1
+        per_step = (time.time() - t0[0]) / done
+        left = per_step * (steps - done)
+        eta = f" · ~{left / 60:.0f} min restantes" if left >= 90 else f" · ~{left:.0f} s restantes"
+        slow = ""
+        if per_step > 45 and not holder.sequential:
+            slow = " · ⚠ muy lento: la VRAM está al límite, cierra otras apps (navegador, juegos)"
+        ctx.progress(0.15 + 0.75 * done / steps, f"Generando vídeo · paso {done}/{steps} · {per_step:.0f} s/paso{eta}{slow}")
         return kwargs
 
     gen = torch.Generator(device="cpu").manual_seed(seed if seed is not None and seed >= 0 else 42)
     def run():
+        t0[0] = time.time()
         kw = {k: v.to("cuda") for k, v in embeds.items()}
         return pipe(**kw, **extra, width=width, height=height, num_frames=frames, num_inference_steps=steps,
                     generator=gen, callback_on_step_end=on_step).frames[0]
