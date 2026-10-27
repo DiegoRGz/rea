@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (analysis, assets, autoreel, batch, brand, captions, catalog, clipper, config, ffmpeg, gpu, project,
-               render, retention)
+               render, retention, updater)
 from .ai import google, hub, image, llm, music, stt, tts, video
 from .jobs import jobs
 
@@ -658,6 +658,19 @@ def hub_add(b: HubAdd) -> dict:
 def hub_remove(b: IdBody) -> dict:
     gpu.release()
     return {"removed": hub.remove_model(b.id)}
+
+
+@app.get("/api/update/check")
+def update_check() -> dict:
+    try:
+        return updater.check()
+    except Exception as exc:  # noqa: BLE001 - sin conexión o límite de la API de GitHub
+        raise HTTPException(502, f"No se pudo comprobar si hay actualizaciones: {exc}") from exc
+
+
+@app.post("/api/update/apply")
+def update_apply() -> dict:
+    return _job("update", "Actualizando ReelForge Studio", updater.apply, "io")
 
 
 @app.post("/api/gpu/release")

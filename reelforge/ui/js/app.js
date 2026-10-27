@@ -174,6 +174,7 @@ async function boot() {
   jobDock();
   gpuPill();
   bridge.onFlowDownload?.((info) => toast(`Importado desde Google Flow: ${info.name}`, "ok"));
+  setTimeout(() => import("./updates.js").then((m) => m.checkInBackground()), 4000);
   window.addEventListener("hashchange", route);
   route();
 }

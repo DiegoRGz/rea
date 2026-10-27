@@ -59,6 +59,14 @@ scripts\build-windows.bat
 Genera en `reelforge\release\` el instalador `ReelForge Studio Setup 1.0.0.exe` y una versión portable.
 Para probar sin empaquetar: `scripts\run-dev.bat`.
 
+### Actualizaciones (sin recompilar)
+
+Desde esta versión la app se actualiza sola: cuando hay una versión nueva aparece **«Actualización disponible»**
+en la barra superior (o en **Ajustes → Actualizaciones**). Descarga el motor y la interfaz nuevos (~25 MB),
+instala sólo las dependencias que falten y pide reiniciar. Proyectos, modelos y ajustes no se tocan, y si la
+versión nueva no arrancara, la app vuelve sola a la anterior. Sólo hace falta recompilar el `.exe` si cambia el
+propio contenedor de Electron (se avisará expresamente).
+
 ### Primer arranque
 
 La pantalla de carga detecta que falta el entorno y **muestra el plan antes de tocar nada**:

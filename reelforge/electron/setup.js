@@ -26,7 +26,8 @@ const envPython = (dir) => (WIN ? path.join(dir, "Scripts", "python.exe") : path
 
 function works(python) {
   if (!python || !fs.existsSync(python)) return false;
-  const r = spawnSync(python, ["-c", "import fastapi, uvicorn, pydantic, httpx"], { windowsHide: true, timeout: 60000 });
+  // Margen amplio: el primer arranque tras reiniciar Windows (o con el antivirus escaneando) es lento.
+  const r = spawnSync(python, ["-c", "import fastapi, uvicorn, pydantic, httpx"], { windowsHide: true, timeout: 180000 });
   return r.status === 0;
 }
 

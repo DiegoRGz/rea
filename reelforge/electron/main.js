@@ -7,10 +7,41 @@ const net = require("node:net");
 const path = require("node:path");
 const setup = require("./setup");
 
-const ROOT = app.isPackaged ? process.resourcesPath : path.join(__dirname, "..");
-const BACKEND = path.join(ROOT, "backend");
-const UI = path.join(ROOT, "ui");
+const BUNDLED_ROOT = app.isPackaged ? process.resourcesPath : path.join(__dirname, "..");
 const DATA = process.env.REELFORGE_DATA || path.join(app.getPath("documents"), "ReelForge");
+// Versiones descargadas por el actualizador integrado (ver backend/reelforge/updater.py)
+const UPDATES = process.platform === "win32" && process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, "ReelForge", "app")
+  : path.join(DATA, "app");
+let ROOT = BUNDLED_ROOT;
+let BACKEND = path.join(ROOT, "backend");
+let UI = path.join(ROOT, "ui");
+
+function setRoot(root) {
+  ROOT = root;
+  BACKEND = path.join(root, "backend");
+  UI = path.join(root, "ui");
+}
+
+/** Versión actualizada lista para usar, o null para usar la instalada. */
+function updatedRoot() {
+  try {
+    const cur = JSON.parse(fs.readFileSync(path.join(UPDATES, "current.json"), "utf8"));
+    const ok = fs.existsSync(path.join(cur.dir, "backend", "reelforge", "__main__.py")) && fs.existsSync(path.join(cur.dir, "ui", "index.html"));
+    return ok ? cur.dir : null;
+  } catch {
+    return null;
+  }
+}
+
+function discardUpdate(reason) {
+  try {
+    fs.renameSync(path.join(UPDATES, "current.json"), path.join(UPDATES, `current.failed-${Date.now()}.json`));
+    fs.appendFileSync(path.join(LOGS, "updates.log"), `${new Date().toISOString()} versión descartada: ${reason}\n`);
+  } catch {
+    /* sin permisos: se ignora */
+  }
+}
 const LOGS = path.join(DATA, "logs");
 const FLOW_URL = "https://labs.google/fx/tools/flow";
 const TOKEN = crypto.randomBytes(18).toString("base64url");
@@ -240,6 +271,12 @@ ipcMain.handle("pick-files", async (_e, filters) => {
 ipcMain.handle("show-item", (_e, p) => typeof p === "string" && shell.showItemInFolder(p));
 ipcMain.handle("open-external", (_e, url) => typeof url === "string" && /^https?:\/\//.test(url) && shell.openExternal(url));
 ipcMain.handle("open-flow", () => createFlowWindow());
+ipcMain.handle("app-restart", () => {
+  quitting = true;
+  stopEngine();
+  app.relaunch();
+  app.exit(0);
+});
 ipcMain.on("win", (e, action) => {
   const w = BrowserWindow.fromWebContents(e.sender);
   if (!w) return;
@@ -260,7 +297,19 @@ async function boot() {
       if (!python) return app.quit();
     }
     status("Iniciando el motor de IA…", 0.45);
-    const url = await startEngine(python);
+    const updated = updatedRoot();
+    if (updated) setRoot(updated);
+    let url;
+    try {
+      url = await startEngine(python);
+    } catch (err) {
+      if (!updated) throw err;
+      // La versión actualizada no arranca: se vuelve a la instalada sin intervención del usuario.
+      discardUpdate(err.message.slice(0, 300));
+      setRoot(BUNDLED_ROOT);
+      status("Restaurando la versión anterior…", 0.5);
+      url = await startEngine(python);
+    }
     status("Detectando GPU y cargando la interfaz…", 0.8);
     await minSplash;
     createMain(url);

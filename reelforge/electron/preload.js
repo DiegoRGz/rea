@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("reelforge", {
   showItemInFolder: (p) => ipcRenderer.invoke("show-item", p),
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
   openFlow: () => ipcRenderer.invoke("open-flow"),
+  restart: () => ipcRenderer.invoke("app-restart"),
   window: {
     minimize: () => ipcRenderer.send("win", "min"),
     maximize: () => ipcRenderer.send("win", "max"),
