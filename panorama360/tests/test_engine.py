@@ -1,5 +1,7 @@
 import dataclasses
 
+import torch
+
 import numpy as np
 import pytest
 from PIL import Image
@@ -93,3 +95,32 @@ def test_cancel_stops_generation(pipe, monkeypatch):
     engine = _engine(pipe, monkeypatch, full_decode=True)
     with pytest.raises(Cancelled):
         engine.generate(_request(), lambda *_: None, should_cancel=lambda: True)
+
+
+def test_offloaded_lora_survives_consecutive_jobs(pipe, monkeypatch):
+    """Perfil de 8 GB: los ganchos de descarga mueven pesos durante la inferencia y el LoRA
+    360 se reajusta en cada trabajo. Con inference_mode el segundo trabajo fallaba con
+    "Setting requires_grad=True on inference tensor outside InferenceMode"."""
+    from peft import LoraConfig
+
+    engine = _engine(pipe, monkeypatch, full_decode=True)
+    if "pano360" not in getattr(pipe.unet, "peft_config", {}):
+        pipe.unet.add_adapter(LoraConfig(r=4, target_modules=["to_q", "to_k", "to_v"]), adapter_name="pano360")
+
+    def fake_load(entry, with_ip, status):
+        engine.pipe, engine.model_key, engine.lora_loaded, engine.ip_loaded = pipe, entry.key, True, with_ip
+
+    monkeypatch.setattr(engine, "_load", fake_load)
+
+    def offload_hook(module, args):  # como accelerate: mueve los pesos dentro del forward
+        module.to(torch.float64)
+        module.to(torch.float32)
+
+    handle = pipe.unet.register_forward_pre_hook(offload_hook)
+    try:
+        for seed in (1, 2):
+            image, _ = engine.generate(_request(seed=seed, refine=False, final_width=128), lambda *_: None)
+            assert image.size == (128, 64)
+    finally:
+        handle.remove()
+        pipe.unet.delete_adapters("pano360")

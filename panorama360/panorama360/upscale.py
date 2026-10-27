@@ -71,7 +71,7 @@ class Upscaler:
                 from .engine import Cancelled
 
                 raise Cancelled()
-            with torch.inference_mode():
+            with torch.no_grad():
                 return model(patch.to(dtype)).float()
 
         result = tiled_apply(

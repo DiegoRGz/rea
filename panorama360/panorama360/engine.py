@@ -215,7 +215,7 @@ class Engine:
         pixels = pixels.permute(2, 0, 1)[None].to(self.device)
 
         def encode(patch: torch.Tensor) -> torch.Tensor:
-            with torch.inference_mode():
+            with torch.no_grad():
                 return vae.encode(patch.to(vae.dtype)).latent_dist.mean.float()
 
         if self.profile.full_decode and image.width <= 2048:
@@ -234,7 +234,7 @@ class Engine:
         latents = latents / self._vae_scale()
 
         def decode(patch: torch.Tensor) -> torch.Tensor:
-            with torch.inference_mode():
+            with torch.no_grad():
                 return vae.decode(patch.to(vae.dtype)).sample.float()
 
         if self.profile.full_decode and latents.shape[-1] * 8 <= 2048:
@@ -252,7 +252,7 @@ class Engine:
 
     def _conditioning(self, prompt: str, negative: str, cfg: float, ip_image: Image.Image | None):
         pipe = self.pipe
-        with torch.inference_mode():
+        with torch.no_grad():
             embeds, neg_embeds, pooled, neg_pooled = pipe.encode_prompt(
                 prompt=prompt, device=self.device, num_images_per_prompt=1,
                 do_classifier_free_guidance=True, negative_prompt=negative,
@@ -277,7 +277,7 @@ class Engine:
         if cond["ip"] is not None:
             added["image_embeds"] = cond["ip"]
         model_input = torch.cat([latents, latents]).to(unet.dtype)
-        with torch.inference_mode():
+        with torch.no_grad():
             noise = unet(model_input, t, encoder_hidden_states=cond["embeds"], added_cond_kwargs=added).sample.float()
         uncond, text = noise.chunk(2)
         return uncond + cond["cfg"] * (text - uncond)
